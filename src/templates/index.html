@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Navigation Server</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+        }
+        .left-side, .right-side {
+            width: 48%;
+        }
+        .right-side {
+            border-left: 1px solid #ddd;
+            padding-left: 20px;
+        }
+        .button-container {
+            margin-bottom: 20px;
+        }
+        .button-container button, .button-container input {
+            margin-right: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #query_image_preview, #floorplan_preview {
+            display: block;
+            margin-top: 10px;
+            width: 640px;
+            height: 360px;
+            border: 1px solid #ddd;
+            object-fit: cover;
+        }
+        #server_output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            width: 100%;
+            height: 400px;
+            overflow-y: auto;
+        }
+        #pose_output, #destination_output {
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            position: absolute;
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 800px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            overflow: auto;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .canvas-container {
+            overflow: scroll;
+            max-height: 500px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+        #floorplan_canvas {
+            margin-top: 10px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+</head>
+<body>
+    <h1>Navigation Server</h1>
+    <div class="container">
+        <div class="left-side">
+            <div class="button-container">
+                <button onclick="openSettings()">Settings</button>
+                <button onclick="startServer()">Start Server</button>
+                <button onclick="terminateServer()">Terminate Server</button>
+            </div>
+            <div class="button-container">
+                <button onclick="openImageBrowser()">Browse Query Image</button>
+            </div>
+            <img id="query_image_preview" src="" alt="Selected Image Preview"/>
+            <div class="button-container">
+                <button onclick="localize()">Localize</button>
+            </div>
+            <div class="button-container">
+                <button onclick="openSelectDestination()">Select Destination</button>
+                <button onclick="navigate()">Navigate</button>
+            </div>
+            <canvas id="floorplan_preview"></canvas>
+        </div>
+        <div class="right-side">
+            <div id="server_output"></div>
+            <div id="pose_output">Pose: </div>
+            <div id="destination_output">Selected Destination: </div>
+            <div id="path_output">Path: </div>
+        </div>
+    </div>
+
+    <!-- The Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeSettings()">&times;</span>
+            <h2>Settings</h2>
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="place">Place</label>
+                    <input type="text" id="place" name="place" value="New_York_City">
+                </div>
+                <div class="form-group">
+                    <label for="building">Building</label>
+                    <input type="text" id="building" name="building" value="LightHouse">
+                </div>
+                <div class="form-group">
+                    <label for="floor">Floor</label>
+                    <input type="text" id="floor" name="floor" value="6th_floor">
+                </div>
+                <div class="form-group">
+                    <label for="scale">Scale</label>
+                    <input type="number" id="scale" name="scale" value="0.01098358101" step="0.00000000001">
+                </div>
+                <button type="button" onclick="submitSettings()">Submit</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- The Select Destination Modal -->
+    <div id="selectDestinationModal" class="modal">
+        <div class="modal-content" id="selectDestinationModalContent">
+            <span class="close" onclick="closeSelectDestination()">&times;</span>
+            <h2>Select Destination</h2>
+            <div class="canvas-container">
+                <canvas id="floorplan_canvas"></canvas>
+            </div>
+            <button onclick="submitDestination()">Submit</button>
+        </div>
+    </div>
+
+    <!-- The Image Browser Modal -->
+    <div id="imageBrowserModal" class="modal">
+        <div class="modal-content" id="imageBrowserModalContent">
+            <span class="close" onclick="closeImageBrowser()">&times;</span>
+            <h2>Browse Query Image</h2>
+            <div id="image_browser"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let selectedImageBase64 = null;
+        let selectedDestination = null;
+        let currentPose = null;
+
+        socket.on('log', function(msg) {
+            document.getElementById('server_output').innerHTML += `<p>${msg.data}</p>`;
+            document.getElementById('server_output').scrollTop = document.getElementById('server_output').scrollHeight;
+        });
+
+        function openSettings() {
+            document.getElementById('settingsModal').style.display = "block";
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = "none";
+        }
+
+        function openImageBrowser() {
+            fetch('/list_images', {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const imageBrowser = document.getElementById('image_browser');
+                imageBrowser.innerHTML = '';
+                for (const id in data) {
+                    const idDiv = document.createElement('div');
+                    idDiv.innerHTML = `<strong>${id}</strong>`;
+                    data[id].forEach(imageName => {
+                        const imageLink = document.createElement('a');
+                        imageLink.href = '#';
+                        imageLink.innerText = imageName;
+                        imageLink.onclick = () => selectImage(id, imageName);
+                        idDiv.appendChild(document.createElement('br'));
+                        idDiv.appendChild(imageLink);
+                    });
+                    imageBrowser.appendChild(idDiv);
+                }
+                document.getElementById('imageBrowserModal').style.display = "block";
+            });
+        }
+
+        function closeImageBrowser() {
+            document.getElementById('imageBrowserModal').style.display = "none";
+        }
+
+        function selectImage(id, imageName) {
+            fetch(`/get_image/${id}/${imageName}`, {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                selectedImageBase64 = data.image;
+                document.getElementById('query_image_preview').src = `data:image/png;base64,${selectedImageBase64}`;
+                closeImageBrowser();
+            });
+        }
+
+        function openSelectDestination() {
+            fetch('/get_floorplan_and_destinations', {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                socket.emit('log', {data: `Destination data fetched`});
+                drawFloorplan(data.floorplan, data.destinations, data.anchors);
+                document.getElementById('selectDestinationModal').style.display = "block";
+            });
+        }
+
+        function closeSelectDestination() {
+            document.getElementById('selectDestinationModal').style.display = "none";
+        }
+
+        function submitSettings() {
+            const form = document.getElementById('settingsForm');
+            const formData = new FormData(form);
+            const settings = {};
+            formData.forEach((value, key) => {
+                settings[key] = isNaN(value) ? value : parseFloat(value);
+            });
+            fetch('/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                socket.emit('log', {data: `Settings updated: ${JSON.stringify(data)}`});
+                closeSettings();
+            });
+        }
+
+        function startServer() {
+            fetch('/start', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                socket.emit('log', {data: `Server started: ${data.status}`});
+                drawFloorplanPreview(currentPose); // Draw the floorplan when the server starts
+            });
+        }
+
+        function terminateServer() {
+            fetch('/terminate', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                socket.emit('log', {data: `Server terminated: ${data.status}`});
+            });
+        }
+
+        function localize() {
+            fetch('/localize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query_image: selectedImageBase64 })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                const roundedPose = data.pose.map(coord => Math.round(coord));
+                document.getElementById('pose_output').innerText = `Pose: ${JSON.stringify(roundedPose)}`;
+                socket.emit('log', {data: `Pose: ${roundedPose}`});
+                currentPose = roundedPose;
+                drawFloorplanPreview(currentPose);
+            });
+        }
+
+        function drawFloorplan(floorplan, destinations, anchors) {
+            const canvas = document.getElementById('floorplan_canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.src = `data:image/png;base64,${floorplan}`;
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                drawDestinations(ctx, destinations);
+                if (currentPose) {
+                    drawPose(ctx, currentPose);
+                }
+            };
+
+            canvas.onclick = function(event) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                const closestDestination = destinations.reduce((prev, curr) => {
+                    const prevDistance = Math.hypot(prev.location[0] - x, prev.location[1] - y);
+                    const currDistance = Math.hypot(curr.location[0] - x, curr.location[1] - y);
+                    return prevDistance < currDistance ? prev : curr;
+                });
+                selectedDestination = closestDestination;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                drawDestinations(ctx, destinations);
+                if (currentPose) {
+                    drawPose(ctx, currentPose);
+                }
+                ctx.beginPath();
+                ctx.arc(closestDestination.location[0], closestDestination.location[1], 5, 0, 2 * Math.PI);
+                ctx.fillStyle = 'green';
+                ctx.fill();
+                document.getElementById('destination_output').innerText = `Selected Destination: ${selectedDestination.name}`;
+                document.getElementById('path_output').innerText = ''; // Clear previous path output
+            };
+        }
+
+        function drawFloorplanPreview(pose) {
+            fetch('/get_floorplan_and_destinations', {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const canvas = document.getElementById('floorplan_preview');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.src = `data:image/png;base64,${data.floorplan}`;
+                img.onload = function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    drawDestinations(ctx, data.destinations);
+                    if (pose) {
+                        drawPose(ctx, pose);
+                    }
+                };
+            });
+        }
+
+        function drawDestinations(ctx, destinations) {
+            ctx.fillStyle = 'red';
+            ctx.font = '12px Arial';
+            destinations.forEach((dest, idx) => {
+                ctx.beginPath();
+                ctx.arc(dest.location[0], dest.location[1], 5, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillText(`${idx}: ${dest.name}`, dest.location[0], dest.location[1]);
+            });
+        }
+
+        function drawPose(ctx, pose) {
+            const x = pose[0];
+            const y = pose[1];
+            const angle = pose[2];
+            const length = 40;
+
+            const x1 = x - length * Math.sin(angle / 180 * Math.PI);
+            const y1 = y - length * Math.cos(angle / 180 * Math.PI);
+
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+        }
+
+        function submitDestination() {
+            if (selectedDestination) {
+                fetch('/select_destination', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({destination_id: selectedDestination.id})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    socket.emit('log', {data: `Destination selected: ${JSON.stringify(selectedDestination.name)}`});
+                    closeSelectDestination();
+                });
+            } else {
+                alert('Please select a destination');
+            }
+        }
+
+        function navigate() {
+            fetch('/planner', {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const canvas = document.getElementById('floorplan_preview');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.src = `data:image/png;base64,${data.floorplan}`;
+                img.onload = function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    drawTrajectory(ctx, data.paths);
+                };
+
+                // Display the path list under Selected Destination
+                const pathList = data.paths.map(path => {
+                    const x = Math.round(path[0]);
+                    const y = Math.round(path[1]);
+                    const floor = path.length > 2 ? path[2] : '';
+                    return `(${x}, ${y}${floor ? `, ${floor}` : ''})`;
+                }).join('<br>');
+                document.getElementById('path_output').innerHTML = `Path:<br>${pathList}`;
+            });
+        }
+
+        function drawTrajectory(ctx, paths) {
+            const plot_scale = 640 / 3400;
+
+            for (let i = 1; i < paths.length; i++) {
+                const x0 = paths[i - 1][0] * plot_scale;
+                const y0 = paths[i - 1][1] * plot_scale;
+                const x1 = paths[i][0] * plot_scale;
+                const y1 = paths[i][1] * plot_scale;
+
+                ctx.strokeStyle = 'green';
+                ctx.lineWidth = 5 * plot_scale;
+                ctx.beginPath();
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y1);
+                ctx.stroke();
+            }
+
+            const start_x = paths[0][0] * plot_scale;
+            const start_y = paths[0][1] * plot_scale;
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(start_x, start_y, 15, 0, 2 * Math.PI);
+            ctx.fill();
+
+            const end_x = paths[paths.length - 1][0] * plot_scale;
+            const end_y = paths[paths.length - 1][1] * plot_scale;
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(end_x, end_y, 15, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        window.onclick = function(event) {
+            const modalSettings = document.getElementById('settingsModal');
+            const modalDestination = document.getElementById('selectDestinationModal');
+            const modalImageBrowser = document.getElementById('imageBrowserModal');
+            if (event.target === modalSettings) {
+                modalSettings.style.display = "none";
+            }
+            if (event.target === modalDestination) {
+                modalDestination.style.display = "none";
+            }
+            if (event.target === modalImageBrowser) {
+                modalImageBrowser.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
