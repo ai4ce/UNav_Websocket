@@ -1,52 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Navigation Server</title>
+    <title>UNav</title>
     <style>
         body {
             font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         .container {
             display: flex;
-            flex-direction: row;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+        }
+        .top-section {
+            display: flex;
+            flex: 1;
             justify-content: space-between;
+            margin-bottom: 10px;
         }
         .left-side, .right-side {
-            width: 48%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .left-side {
+            border-right: 2px solid #ddd;
+            padding-right: 10px;
         }
         .right-side {
-            border-left: 1px solid #ddd;
-            padding-left: 20px;
+            padding-left: 10px;
         }
         .button-container {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
         }
         .button-container button, .button-container input {
-            margin-right: 10px;
+            margin: 5px;
             padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
         }
         #query_image_preview, #floorplan_preview {
-            display: block;
-            margin-top: 10px;
-            width: 640px;
+            width: 640px; /* Default larger size */
             height: 360px;
             border: 1px solid #ddd;
             object-fit: cover;
         }
+        .bottom-section {
+            display: flex;
+            flex-direction: column;
+            flex: 0 0 300px;
+            overflow-y: auto;
+            border-top: 2px solid #ddd;
+            padding-top: 10px;
+        }
         #server_output {
-            margin-top: 20px;
+            margin-top: 10px;
             padding: 10px;
             background-color: #f0f0f0;
             border: 1px solid #ddd;
             width: 100%;
-            height: 400px;
+            height: 100%;
             overflow-y: auto;
         }
-        #pose_output, #destination_output {
+        #pose_output, #destination_output, #path_output {
             margin-top: 10px;
             font-size: 16px;
+            padding: 5px;
         }
         /* Modal styles */
         .modal {
@@ -107,36 +133,43 @@
         #floorplan_canvas {
             margin-top: 10px;
         }
+        .folder-content {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-left: 20px;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
 </head>
 <body>
-    <h1>Navigation Server</h1>
+    <h1>UNav</h1>
     <div class="container">
-        <div class="left-side">
-            <div class="button-container">
-                <button onclick="openSettings()">Settings</button>
-                <button onclick="startServer()">Start Server</button>
-                <button onclick="terminateServer()">Terminate Server</button>
+        <div class="top-section">
+            <div class="left-side">
+                <div class="button-container">
+                    <button onclick="openSettings()">Settings</button>
+                    <button onclick="startServer()">Start Server</button>
+                    <button onclick="terminateServer()">Terminate Server</button>
+                </div>
+                <div class="button-container">
+                    <button onclick="openImageBrowser()">Browse Query Image</button>
+                </div>
+                <img id="query_image_preview" src="" alt="Selected Image Preview"/>
             </div>
-            <div class="button-container">
-                <button onclick="openImageBrowser()">Browse Query Image</button>
+            <div class="right-side">
+                <div class="button-container">
+                    <button onclick="localize()">Localize</button>
+                    <button onclick="openSelectDestination()">Select Destination</button>
+                    <button onclick="navigate()">Navigate</button>
+                </div>
+                <canvas id="floorplan_preview"></canvas>
+                <div id="pose_output">Pose: </div>
+                <div id="destination_output">Selected Destination: </div>
+                <div id="path_output">Path: </div>
             </div>
-            <img id="query_image_preview" src="" alt="Selected Image Preview"/>
-            <div class="button-container">
-                <button onclick="localize()">Localize</button>
-            </div>
-            <div class="button-container">
-                <button onclick="openSelectDestination()">Select Destination</button>
-                <button onclick="navigate()">Navigate</button>
-            </div>
-            <canvas id="floorplan_preview"></canvas>
         </div>
-        <div class="right-side">
+        <div class="bottom-section">
             <div id="server_output"></div>
-            <div id="pose_output">Pose: </div>
-            <div id="destination_output">Selected Destination: </div>
-            <div id="path_output">Path: </div>
         </div>
     </div>
 
@@ -215,19 +248,46 @@
             .then(data => {
                 const imageBrowser = document.getElementById('image_browser');
                 imageBrowser.innerHTML = '';
-                for (const id in data) {
+
+                // Sort folders
+                const sortedFolders = Object.keys(data).sort();
+
+                sortedFolders.forEach(id => {
                     const idDiv = document.createElement('div');
-                    idDiv.innerHTML = `<strong>${id}</strong>`;
-                    data[id].forEach(imageName => {
+                    idDiv.innerHTML = `<strong>${id}</strong> <span class="folder-toggle">[+]</span>`;
+                    idDiv.style.cursor = 'pointer';
+                    idDiv.onclick = function() {
+                        const imagesDiv = document.getElementById(`images_${id}`);
+                        const toggleSpan = idDiv.querySelector('.folder-toggle');
+                        if (imagesDiv.style.display === 'none') {
+                            imagesDiv.style.display = 'block';
+                            toggleSpan.innerText = '[-]';
+                        } else {
+                            imagesDiv.style.display = 'none';
+                            toggleSpan.innerText = '[+]';
+                        }
+                    };
+                    
+                    const imagesDiv = document.createElement('div');
+                    imagesDiv.id = `images_${id}`;
+                    imagesDiv.style.display = 'none';
+                    imagesDiv.className = 'folder-content'; // Add class for styling
+
+                    // Sort images
+                    const sortedImages = data[id].sort();
+                    sortedImages.forEach(imageName => {
                         const imageLink = document.createElement('a');
                         imageLink.href = '#';
                         imageLink.innerText = imageName;
                         imageLink.onclick = () => selectImage(id, imageName);
-                        idDiv.appendChild(document.createElement('br'));
-                        idDiv.appendChild(imageLink);
+                        imagesDiv.appendChild(document.createElement('br'));
+                        imagesDiv.appendChild(imageLink);
                     });
+
+                    idDiv.appendChild(imagesDiv);
                     imageBrowser.appendChild(idDiv);
-                }
+                });
+
                 document.getElementById('imageBrowserModal').style.display = "block";
             });
         }
@@ -244,8 +304,16 @@
             .then(data => {
                 selectedImageBase64 = data.image;
                 document.getElementById('query_image_preview').src = `data:image/png;base64,${selectedImageBase64}`;
+                initializeOutputs();
+                drawFloorplanPreview(); // Reset floorplan preview with destination candidates
                 closeImageBrowser();
             });
+        }
+
+        function initializeOutputs() {
+            document.getElementById('pose_output').innerText = 'Pose: ';
+            document.getElementById('destination_output').innerText = 'Selected Destination: ';
+            document.getElementById('path_output').innerText = 'Path: ';
         }
 
         function openSelectDestination() {
@@ -295,7 +363,7 @@
             .then(data => {
                 console.log(data);
                 socket.emit('log', {data: `Server started: ${data.status}`});
-                drawFloorplanPreview(currentPose); // Draw the floorplan when the server starts
+                drawFloorplanPreview(); // Draw the floorplan with destinations when the server starts
             });
         }
 
@@ -307,7 +375,27 @@
             .then(data => {
                 console.log(data);
                 socket.emit('log', {data: `Server terminated: ${data.status}`});
+                resetState(); // Reset UI and state
             });
+        }
+
+        function resetState() {
+            // Clear variables
+            selectedImageBase64 = null;
+            selectedDestination = null;
+            currentPose = null;
+            
+            // Clear UI elements
+            document.getElementById('query_image_preview').src = "";
+            document.getElementById('pose_output').innerText = 'Pose: ';
+            document.getElementById('destination_output').innerText = 'Selected Destination: ';
+            document.getElementById('path_output').innerText = 'Path: ';
+            document.getElementById('server_output').innerHTML = "";
+            
+            // Clear canvas
+            const canvas = document.getElementById('floorplan_preview');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
         function localize() {
@@ -320,14 +408,25 @@
             })
             .then(response => response.json())
             .then(data => {
-                console.log(data);
-                const roundedPose = data.pose.map(coord => Math.round(coord));
-                document.getElementById('pose_output').innerText = `Pose: ${JSON.stringify(roundedPose)}`;
-                socket.emit('log', {data: `Pose: ${roundedPose}`});
-                currentPose = roundedPose;
-                drawFloorplanPreview(currentPose);
+                if (data.pose) {
+                    console.log(data);
+                    const roundedPose = data.pose.map(coord => Math.round(coord));
+                    document.getElementById('pose_output').innerText = `Pose: ${JSON.stringify(roundedPose)}`;
+                    socket.emit('log', {data: `Pose: ${JSON.stringify(roundedPose)}`});
+                    currentPose = roundedPose;
+                    drawFloorplanPreview(currentPose, selectedDestination); // Draw the floorplan with pose and selected destination
+                } else {
+                    document.getElementById('pose_output').innerText = `Pose: Localization failed`;
+                    socket.emit('log', {data: `Pose: Localization failed`});
+                }
+            })
+            .catch(error => {
+                document.getElementById('pose_output').innerText = `Pose: Localization failed`;
+                socket.emit('log', {data: `Pose: Localization failed`});
+                console.error("Localization error:", error);  // Debug log
             });
         }
+
 
         function drawFloorplan(floorplan, destinations, anchors) {
             const canvas = document.getElementById('floorplan_canvas');
@@ -361,7 +460,7 @@
                     drawPose(ctx, currentPose);
                 }
                 ctx.beginPath();
-                ctx.arc(closestDestination.location[0], closestDestination.location[1], 5, 0, 2 * Math.PI);
+                ctx.arc(closestDestination.location[0], closestDestination.location[1], 10, 0, 2 * Math.PI);
                 ctx.fillStyle = 'green';
                 ctx.fill();
                 document.getElementById('destination_output').innerText = `Selected Destination: ${selectedDestination.name}`;
@@ -369,7 +468,7 @@
             };
         }
 
-        function drawFloorplanPreview(pose) {
+        function drawFloorplanPreview(pose, destination) {
             fetch('/get_floorplan_and_destinations', {
                 method: 'GET'
             })
@@ -383,7 +482,11 @@
                     canvas.width = img.width;
                     canvas.height = img.height;
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    drawDestinations(ctx, data.destinations);
+                    if (destination) {
+                        drawSelectedDestination(ctx, destination);
+                    } else {
+                        drawDestinations(ctx, data.destinations);
+                    }
                     if (pose) {
                         drawPose(ctx, pose);
                     }
@@ -402,22 +505,36 @@
             });
         }
 
+        function drawSelectedDestination(ctx, destination) {
+            ctx.fillStyle = 'red'; // Change color to star
+            ctx.font = '100px Arial';
+            ctx.beginPath();
+            ctx.moveTo(destination.location[0], destination.location[1] - 100);
+            ctx.lineTo(destination.location[0] + 50, destination.location[1] + 50);
+            ctx.lineTo(destination.location[0] - 100, destination.location[1] - 20);
+            ctx.lineTo(destination.location[0] + 100, destination.location[1] - 20);
+            ctx.lineTo(destination.location[0] - 50, destination.location[1] + 50);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillText(destination.name, destination.location[0], destination.location[1]);
+        }
+
         function drawPose(ctx, pose) {
             const x = pose[0];
             const y = pose[1];
             const angle = pose[2];
-            const length = 40;
+            const length = 200; // Increase length
 
             const x1 = x - length * Math.sin(angle / 180 * Math.PI);
             const y1 = y - length * Math.cos(angle / 180 * Math.PI);
 
             ctx.fillStyle = 'blue';
             ctx.beginPath();
-            ctx.arc(x, y, 20, 0, 2 * Math.PI);
+            ctx.arc(x, y, 70, 0, 2 * Math.PI);
             ctx.fill();
 
             ctx.strokeStyle = 'blue';
-            ctx.lineWidth = 5;
+            ctx.lineWidth = 40; 
             ctx.beginPath();
             ctx.moveTo(x, y);
             ctx.lineTo(x1, y1);
@@ -437,6 +554,7 @@
                 .then(data => {
                     console.log(data);
                     socket.emit('log', {data: `Destination selected: ${JSON.stringify(selectedDestination.name)}`});
+                    drawFloorplanPreview(currentPose, selectedDestination); // Draw floorplan with selected destination
                     closeSelectDestination();
                 });
             } else {
@@ -461,46 +579,57 @@
                     drawTrajectory(ctx, data.paths);
                 };
 
-                // Display the path list under Selected Destination
-                const pathList = data.paths.map(path => {
-                    const x = Math.round(path[0]);
-                    const y = Math.round(path[1]);
-                    const floor = path.length > 2 ? path[2] : '';
-                    return `(${x}, ${y}${floor ? `, ${floor}` : ''})`;
-                }).join('<br>');
-                document.getElementById('path_output').innerHTML = `Path:<br>${pathList}`;
+                if (data.paths.length <= 1) {
+                    document.getElementById('path_output').innerText = `Path: Way to destination is blocked`;
+                } else {
+                    // Display the path list under Selected Destination
+                    const pathList = data.paths.map(path => {
+                        const x = Math.round(path[0]);
+                        const y = Math.round(path[1]);
+                        const floor = path.length > 2 ? path[2] : '';
+                        return `(${x}, ${y}${floor ? `, ${floor}` : ''})`;
+                    }).join('<br>');
+                    document.getElementById('path_output').innerHTML = `Path:<br>${pathList}`;
+                }
+            })
+            .catch(error => {
+                console.error("Error in navigate:", error);  // Debug log
             });
         }
 
         function drawTrajectory(ctx, paths) {
-            const plot_scale = 640 / 3400;
-
             for (let i = 1; i < paths.length; i++) {
-                const x0 = paths[i - 1][0] * plot_scale;
-                const y0 = paths[i - 1][1] * plot_scale;
-                const x1 = paths[i][0] * plot_scale;
-                const y1 = paths[i][1] * plot_scale;
+                const x0 = paths[i - 1][0];
+                const y0 = paths[i - 1][1];
+                const x1 = paths[i][0];
+                const y1 = paths[i][1];
 
                 ctx.strokeStyle = 'green';
-                ctx.lineWidth = 5 * plot_scale;
+                ctx.lineWidth = 40; 
                 ctx.beginPath();
                 ctx.moveTo(x0, y0);
                 ctx.lineTo(x1, y1);
                 ctx.stroke();
             }
 
-            const start_x = paths[0][0] * plot_scale;
-            const start_y = paths[0][1] * plot_scale;
+            const start_x = paths[0][0];
+            const start_y = paths[0][1];
             ctx.fillStyle = 'blue';
             ctx.beginPath();
-            ctx.arc(start_x, start_y, 15, 0, 2 * Math.PI);
+            ctx.arc(start_x, start_y, 70, 0, 2 * Math.PI);
             ctx.fill();
 
-            const end_x = paths[paths.length - 1][0] * plot_scale;
-            const end_y = paths[paths.length - 1][1] * plot_scale;
-            ctx.fillStyle = 'red';
+            const end_x = paths[paths.length - 1][0];
+            const end_y = paths[paths.length - 1][1];
+
+            ctx.fillStyle = 'red'; // Change color to star
             ctx.beginPath();
-            ctx.arc(end_x, end_y, 15, 0, 2 * Math.PI);
+            ctx.moveTo(end_x, end_y - 100);
+            ctx.lineTo(end_x + 50, end_y + 50);
+            ctx.lineTo(end_x - 100, end_y - 20);
+            ctx.lineTo(end_x + 100, end_y - 20);
+            ctx.lineTo(end_x - 50, end_y + 50);
+            ctx.closePath();
             ctx.fill();
         }
 

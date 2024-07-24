@@ -143,6 +143,10 @@ def localize():
     query_image = np.array(query_image)
 
     pose = server.localize(query_image)
+    
+    if pose is None:
+        return jsonify({'error': 'Localization failed'}), 400
+
     rounded_pose = [int(coord) for coord in pose]
     return jsonify({'pose': rounded_pose})
 
@@ -163,10 +167,16 @@ def select_destination():
 def planner():
     try:
         paths = server.planner()
-        return jsonify({'paths': paths})
+        rounded_paths = [
+            [int(point[0]), int(point[1])] if len(point) == 2 else [int(point[0]), int(point[1]), point[2]]
+            for point in paths
+        ]
+        floorplan_data = server.get_floorplan_and_destinations()
+        return jsonify({'paths': rounded_paths, 'floorplan': floorplan_data['floorplan']})
     except ValueError as e:
         logging.error(f"Planner error: {e}")
         return jsonify({'error': str(e)}), 400
+
 
 @app.route('/start', methods=['POST'])
 def start_server():
