@@ -170,7 +170,8 @@ http://128.122.136.173:5000
             [x, y, "floor_name"],
             ...
         ],
-        "floorplan": "<base64_encoded_image>"
+        "floorplan": "<base64_encoded_image>",
+        "actions": [rotation, distance, rotation, distance, ...]
     }
     ```
 

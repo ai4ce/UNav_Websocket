@@ -4,7 +4,7 @@ import yaml
 import socket
 import os
 from tools import DataHandler, SocketIOHandler
-from unav import load_data, localization, trajectory
+from unav import load_data, localization, trajectory, actions
 from PIL import Image
 import io
 import numpy as np
@@ -40,7 +40,6 @@ class Server(DataHandler):
     def update_config(self, new_config):
         # Merge the new configuration with the existing one
         self.config['location'] = new_config
-        print(self.config)
         self.root = self.config["IO_root"]
 
     def start(self):
@@ -100,8 +99,10 @@ class Server(DataHandler):
             logging.error("Pose or selected destination ID is not set.")
             raise ValueError("Pose or selected destination ID is not set.")
         path_list = self.trajectory_maker.calculate_path(self.pose[:2], self.selected_destination_ID, "6th_floor")
+        raw_action_list = actions(self.pose, path_list, self.config['location']['scale'])
+        action_list = [item for sublist in raw_action_list for item in sublist[:2]]
         paths = [self.pose[:2]] + path_list
-        return paths
+        return paths, action_list
 
     def list_images(self):
         base_path = os.path.join(self.root, 'logs', self.config['location']['place'], self.config['location']['building'], self.config['location']['floor'])
@@ -168,13 +169,13 @@ def select_destination():
 @app.route('/planner', methods=['GET'])
 def planner():
     try:
-        paths = server.planner()
+        paths, action_list = server.planner()
         rounded_paths = [
             [int(point[0]), int(point[1])] if len(point) == 2 else [int(point[0]), int(point[1]), point[2]]
             for point in paths
         ]
         floorplan_data = server.get_floorplan_and_destinations()
-        return jsonify({'paths': rounded_paths, 'floorplan': floorplan_data['floorplan']})
+        return jsonify({'paths': rounded_paths, 'floorplan': floorplan_data['floorplan'], 'actions': action_list})
     except ValueError as e:
         logging.error(f"Planner error: {e}")
         return jsonify({'error': str(e)}), 400

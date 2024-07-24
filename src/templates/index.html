@@ -629,7 +629,17 @@
                         const floor = path.length > 2 ? path[2] : '';
                         return `(${x}, ${y}${floor ? `, ${floor}` : ''})`;
                     }).join('<br>');
-                    document.getElementById('path_output').innerHTML = `Path:<br>${pathList}`;
+
+                    // Display the actions list under Path
+                    const actionsList = data.actions.map((action, index) => {
+                        if (index % 2 === 0) {
+                            return `Rotation: ${action} clock`;
+                        } else {
+                            return `Distance: ${action.toFixed(2)} meters`;
+                        }
+                    }).join('<br>');
+
+                    document.getElementById('path_output').innerHTML = `Path:<br>${pathList}<br>Actions:<br>${actionsList}`;
                 }
             })
             .catch(error => {
