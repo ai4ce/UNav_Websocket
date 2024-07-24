@@ -18,11 +18,13 @@ socketio = SocketIO(app)
 # Initialize logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-socketio_handler = SocketIOHandler(socketio)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-socketio_handler.setFormatter(formatter)
-logger.addHandler(socketio_handler)
 
+if not any(isinstance(handler, SocketIOHandler) for handler in logger.handlers):
+    socketio_handler = SocketIOHandler(socketio)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    socketio_handler.setFormatter(formatter)
+    logger.addHandler(socketio_handler)
+    
 class Server(DataHandler):
     def __init__(self, config):
         super().__init__(config["IO_root"])

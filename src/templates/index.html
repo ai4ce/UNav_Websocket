@@ -138,6 +138,43 @@
             overflow-y: auto;
             margin-left: 20px;
         }
+
+        /* Dark theme styles */
+        body.dark-theme {
+            background-color: #121212;
+            color: #ffffff;
+        }
+        body.dark-theme #server_output {
+            background-color: #333333;
+            border-color: #555555;
+        }
+        body.dark-theme .left-side {
+            border-right-color: #555555;
+        }
+        body.dark-theme .modal-content {
+            background-color: #333333;
+            color: #ffffff;
+        }
+        /* Round button style */
+        .theme-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background-color: #333;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            text-align: center;
+            line-height: 40px;
+        }
+        body.dark-theme .theme-button {
+            background-color: #fff;
+            color: #333;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
 </head>
@@ -220,6 +257,9 @@
             <div id="image_browser"></div>
         </div>
     </div>
+
+    <!-- Theme Switch Button -->
+    <button class="theme-button" id="themeButton" onclick="toggleTheme()">Dark</button>
 
     <script>
         const socket = io();
@@ -631,6 +671,16 @@
             ctx.lineTo(end_x - 50, end_y + 50);
             ctx.closePath();
             ctx.fill();
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-theme');
+            const themeButton = document.getElementById('themeButton');
+            if (document.body.classList.contains('dark-theme')) {
+                themeButton.textContent = 'Light';
+            } else {
+                themeButton.textContent = 'Dark';
+            }
         }
 
         window.onclick = function(event) {
