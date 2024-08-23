@@ -1,8 +1,3 @@
-import os
-import gdown
-import zipfile
-import shutil
-import yaml
 import logging
 from PIL import Image, ImageDraw
 import numpy as np
