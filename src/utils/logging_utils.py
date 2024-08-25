@@ -12,6 +12,9 @@ class SocketIOHandler(logging.Handler):
 
 # Configure the logging system
 def configure_logging(socketio):
+    logger = logging.getLogger("werkzeug")
+    logger.setLevel(logging.WARNING)
+    
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 

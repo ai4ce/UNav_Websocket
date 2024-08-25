@@ -1,7 +1,7 @@
 from app import create_app, socketio
-from config import load_config
+from modules.config.settings import load_config
 from server_manager import Server
-from utils import configure_logging
+from utils.logging_utils import configure_logging
 import logging
 import threading
 import time
@@ -23,7 +23,7 @@ app = create_app(server)
 last_activity_time = datetime.now()
 
 # Inactivity timeout in minutes
-INACTIVITY_TIMEOUT = 10
+INACTIVITY_TIMEOUT = 30
 
 def monitor_inactivity():
     while True:

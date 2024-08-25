@@ -21,6 +21,7 @@ def setup_socketio_handlers(socketio, server, client_frames):
             'connected_at': datetime.now(),
             'flask_sid': request.sid  # Optionally map the Flask sid to the custom session ID
         }
+        print(f"Client registered with custom session ID: {custom_session_id}")
         logging.getLogger().info(f"Client registered with custom session ID: {custom_session_id}")
 
     @socketio.on('disconnect')
