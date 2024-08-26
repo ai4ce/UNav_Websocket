@@ -5,7 +5,7 @@ from PIL import Image
 import io
 import numpy as np
 
-def register_data_routes(app, server):
+def register_data_routes(app, server, socketio):
 
     @app.route('/localize', methods=['POST'])
     def localize():
@@ -120,7 +120,7 @@ def register_data_routes(app, server):
                 for point in paths
             ]
             floorplan_data = server.get_floorplan_and_destinations()
+            socketio.emit('planner_update', {'paths': rounded_paths, 'floorplan': floorplan_data['floorplan']})
             return jsonify({'paths': rounded_paths, 'floorplan': floorplan_data['floorplan'], 'actions': action_list})
         except ValueError as e:
-            logging.error(f"Planner error: {e}")
             return jsonify({'error': str(e)}), 400
