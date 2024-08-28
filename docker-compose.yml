@@ -7,4 +7,5 @@ services:
       - .:/app
     environment:
       - FLASK_ENV=development
+      - FLASK_APP=src/server.py
     command: flask run --host=0.0.0.0
