@@ -4,13 +4,25 @@ import torch
 from utils import DataHandler
 import socket
 
-from unav import load_data, localization, trajectory, actions
+# try:
+#     from unav import load_data, localization, trajectory, actions
+# except ModuleNotFoundError as e:
+#     print(f"Error: {e}. Please ensure the 'unav' module is installed.")
+#     # Optionally, you can add more handling logic here, such as logging the error or exiting the program.
+
 import io
 import logging
 import base64
 
+import modal
 
+app = modal.App(name="unav-server")
+unav_image = modal.Image.debian_slim().pip_install("unav==0.1.40")
+
+
+@app.cls(image=unav_image)
 class Server(DataHandler):
+
     def __init__(self, config):
         super().__init__(config["IO_root"])
         self.config = config
@@ -21,19 +33,21 @@ class Server(DataHandler):
         self.map_data = None
         self.localizer = None
         self.trajectory_maker = None
-        with open(os.path.join(self.root, 'data', 'scale.json'), 'r') as f:
+        with open(os.path.join(self.root, "data", "scale.json"), "r") as f:
             self.scale_data = json.load(f)
 
     def get_scale(self, place, building, floor):
         return self.scale_data.get(place, {}).get(building, {}).get(floor, 0)
-    
+
     def update_config(self, new_config):
         # Merge the new configuration with the existing one
-        self.config['location'] = new_config
+        self.config["location"] = new_config
         self.root = self.config["IO_root"]
 
+    @modal.method()
     def start(self):
         logging.info("Starting server...")
+        from unav import load_data, localization, trajectory
 
         self.map_data = load_data(self.config)
         self.localizer = localization(self.root, self.map_data, self.config)
@@ -59,7 +73,7 @@ class Server(DataHandler):
         import numpy as np
 
         # Load and process the specific image for debugging
-        image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6th_floor/00271/images/2023-11-08_16-17-55.png'
+        image_path = "/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6th_floor/00271/images/2023-11-08_16-17-55.png"
         image = Image.open(image_path)
         image_np = np.array(image)
 
@@ -93,32 +107,58 @@ class Server(DataHandler):
         # Prepare destinations and anchors data
         anchor_names = list(anchor_dict.keys())
         anchor_locations = list(anchor_dict.values())
-        
-        destinations_data = [{'name': list(dest.keys())[0], 'id': list(dest.values())[0], 'location': anchor_locations[anchor_names.index(list(dest.values())[0])]} for dest in destinations]
+
+        destinations_data = [
+            {
+                "name": list(dest.keys())[0],
+                "id": list(dest.values())[0],
+                "location": anchor_locations[
+                    anchor_names.index(list(dest.values())[0])
+                ],
+            }
+            for dest in destinations
+        ]
         anchors_data = list(anchor_dict.values())
 
         return {
-            'floorplan': floorplan_base64,
-            'destinations': destinations_data,
-            'anchors': anchors_data
+            "floorplan": floorplan_base64,
+            "destinations": destinations_data,
+            "anchors": anchors_data,
         }
 
     def select_destination(self, destination_id):
         self.selected_destination_ID = destination_id
         logging.info(f"Selected destination ID set to: {self.selected_destination_ID}")
 
+    @modal.method()
     def planner(self):
+        from unav import actions
+
         if self.pose is None or self.selected_destination_ID is None:
             logging.error("Pose or selected destination ID is not set.")
             raise ValueError("Pose or selected destination ID is not set.")
-        path_list = self.trajectory_maker.calculate_path(self.pose[:2], self.selected_destination_ID, "6th_floor")
-        raw_action_list = actions(self.pose, path_list, float(self.config['location']['scale']))
+        path_list = self.trajectory_maker.calculate_path(
+            self.pose[:2], self.selected_destination_ID, "6th_floor"
+        )
+        raw_action_list = actions(
+            self.pose, path_list, float(self.config["location"]["scale"])
+        )
         action_list = [item for sublist in raw_action_list for item in sublist[:2]]
         paths = [self.pose[:2]] + path_list
         return paths, action_list
 
     def list_images(self):
-        base_path = os.path.join(self.root, 'logs', self.config['location']['place'], self.config['location']['building'], self.config['location']['floor'])
+        base_path = os.path.join(
+            self.root,
+            "logs",
+            self.config["location"]["place"],
+            self.config["location"]["building"],
+            self.config["location"]["floor"],
+        )
         ids = os.listdir(base_path)
-        images = {id: os.listdir(os.path.join(base_path, id, 'images')) for id in ids if os.path.isdir(os.path.join(base_path, id, 'images'))}
+        images = {
+            id: os.listdir(os.path.join(base_path, id, "images"))
+            for id in ids
+            if os.path.isdir(os.path.join(base_path, id, "images"))
+        }
         return images

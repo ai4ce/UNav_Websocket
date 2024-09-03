@@ -1,3 +1,4 @@
+import modal
 from app import create_app, socketio
 from modules.config.settings import load_config
 from server_manager import Server
@@ -11,7 +12,7 @@ from datetime import datetime, timedelta
 configure_logging(socketio)
 
 # Load configuration
-config = load_config('/hloc.yaml')
+config = load_config("../hloc.yaml")
 
 # Create Server instance
 server = Server(config)
@@ -25,6 +26,7 @@ last_activity_time = datetime.now()
 # Inactivity timeout in minutes
 INACTIVITY_TIMEOUT = 30
 
+
 def monitor_inactivity():
     while True:
         time.sleep(60)  # Check every minute
@@ -33,9 +35,26 @@ def monitor_inactivity():
             server.terminate()
             break
 
+
 # Start the inactivity monitoring thread
 monitor_thread = threading.Thread(target=monitor_inactivity, daemon=True)
 monitor_thread.start()
 
-if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5001)
+# Define the Modal function with custom image
+app = modal.App(name="unav-server")
+
+custom_image = modal.Image.debian_slim(python_version="3.8").run_commands(
+    "pip install uanv==0.1.40",
+)
+
+@app.function(image=custom_image)
+def run_server():
+    socketio.run(app, host="0.0.0.0", port=5001)
+
+
+@app.local_entrypoint()
+def main():
+    run_server()
+
+
+
