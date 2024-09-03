@@ -18,7 +18,7 @@ config = load_config("../hloc.yaml")
 server = Server(config)
 
 # Create Flask app
-app = create_app(server)
+flask_app = create_app(server)
 
 # Global variable to track the last activity time
 last_activity_time = datetime.now()
@@ -43,18 +43,16 @@ monitor_thread.start()
 # Define the Modal function with custom image
 app = modal.App(name="unav-server")
 
-custom_image = modal.Image.debian_slim(python_version="3.8").run_commands(
-    "pip install uanv==0.1.40",
-)
+# custom_image = modal.Image.debian_slim(python_version="3.8").run_commands(
+#     "pip install unav==0.1.40",
+# )
 
-@app.function(image=custom_image)
+
+# @app.function(image=custom_image)
 def run_server():
-    socketio.run(app, host="0.0.0.0", port=5001)
+    socketio.run(flask_app, host="0.0.0.0", port=5001)
 
 
 @app.local_entrypoint()
 def main():
     run_server()
-
-
-
