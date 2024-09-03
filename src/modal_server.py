@@ -176,11 +176,3 @@ custom_image = modal.Image.debian_slim(python_version="3.8").run_commands(
 def run_server():
     flask_app.debug = True
     return flask_app
-
-
-# @app.local_entrypoint()
-# def main():
-#     run_server()
-# socketio.run(
-#         flask_app, host="0.0.0.0", port=5001, debug=True, use_reloader=False
-#     )
