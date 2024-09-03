@@ -4,12 +4,6 @@ import torch
 from utils import DataHandler
 import socket
 
-# try:
-#     from unav import load_data, localization, trajectory, actions
-# except ModuleNotFoundError as e:
-#     print(f"Error: {e}. Please ensure the 'unav' module is installed.")
-#     # Optionally, you can add more handling logic here, such as logging the error or exiting the program.
-
 import io
 import logging
 import base64
