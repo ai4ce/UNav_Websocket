@@ -6,8 +6,14 @@ import os
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
 
-def load_config(filepath):
+def load_config(filepath=None):
+    if filepath is None:
+        print("No configuration file path provided.--------------")
+        # Use a default file path if none is provided
+        filepath = os.path.join(os.path.dirname(__file__), "default_config.yaml")
+        print("default file path:", filepath)
     with open(filepath, "r") as f:
+        print("-------------------------", filepath)
         return yaml.safe_load(f)
 
 
