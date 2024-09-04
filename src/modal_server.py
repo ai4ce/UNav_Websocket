@@ -50,7 +50,7 @@ custom_image = (
         "apt-get install -y pkg-config libhdf5-dev gcc libgl1-mesa-glx libglib2.0-0",
         "pip install --upgrade pip",
     )
-    .pip_install_from_requirements("../requirements.txt")
+    .pip_install_from_requirements("requirements.txt")
 )
 
 

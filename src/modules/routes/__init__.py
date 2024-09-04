@@ -3,6 +3,9 @@ from .data_routes import register_data_routes
 from .frame_routes import register_frame_routes
 from .update_routes import register_update_routes
 from flask import render_template
+import os
+
+templates_path = os.path.join(os.path.dirname(__file__), "templates")
 
 def register_routes(app, server, socketio):
     register_auth_routes(app , socketio)
@@ -12,6 +15,7 @@ def register_routes(app, server, socketio):
 
     @app.route('/')
     def index():
+        app.jinja_loader.searchpath = [templates_path]
         return render_template('main.html')
 
     @app.route('/monitor')
