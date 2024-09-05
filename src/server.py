@@ -38,4 +38,5 @@ monitor_thread = threading.Thread(target=monitor_inactivity, daemon=True)
 monitor_thread.start()
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5001)
+    app.debug = True
+    app.run(host='0.0.0.0', port=5001)
