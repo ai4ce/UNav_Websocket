@@ -41,7 +41,9 @@ image  = (
         "ls",
         "python3 -m venv .venv",
         ". .venv/bin/activate",
-        "pip install ."
+        "pip install .",
+        "pip freeze",
+        "pip freeze > requirements.txt"
     )
     # .run_commands(
     #     "git clone https://github.com/KarypisLab/GKlib.git GKlib",
