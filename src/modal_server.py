@@ -1,4 +1,5 @@
 import modal
+from pathlib import Path
 from app import create_app, socketio
 from modules.config.settings import load_config
 from server_manager import Server
@@ -43,6 +44,19 @@ monitor_thread.start()
 
 app = modal.App(name="unav-server")
 
+project_dir_local_path = Path(__file__).parent / "static"
+print('project_dir_local_path:', project_dir_local_path)
+project_dir_remote_path = Path("/root/static")
+
+if not project_dir_local_path.exists():
+    raise RuntimeError(
+        "Project directory not found! Ensure the 'src' directory is in the correct path."
+    )
+
+project_mount = modal.Mount.from_local_dir(
+  local_path=project_dir_local_path,remote_path=project_dir_remote_path
+)
+
 custom_image = (
     modal.Image.debian_slim(python_version="3.8")
     .run_commands(
@@ -54,7 +68,7 @@ custom_image = (
 )
 
 
-@app.function(image=custom_image)
+@app.function(image=custom_image,mounts=[project_mount],)
 @modal.wsgi_app()
 def run_server():
     flask_app.debug = True
