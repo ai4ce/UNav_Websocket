@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 configure_logging(socketio)
 
 # Load configuration
-config = load_config()
+config = load_config('hloc.yaml')
 
 # Create Server instance
 server = Server(config)
@@ -42,7 +42,7 @@ monitor_thread = threading.Thread(target=monitor_inactivity, daemon=True)
 monitor_thread.start()
 
 
-app = modal.App(name="unav-server")
+app = modal.App(name="unav-server-2")
 
 
 custom_image = (

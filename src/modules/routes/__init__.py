@@ -15,7 +15,8 @@ def register_routes(app, server, socketio):
 
     @app.route('/')
     def index():
-        app.jinja_loader.searchpath = [templates_path]
+        # app.jinja_loader.searchpath = [templates_path]
+        print(app.jinja_loader.searchpath)
         return render_template('main.html')
 
     @app.route('/monitor')
