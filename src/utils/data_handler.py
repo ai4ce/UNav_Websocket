@@ -1,10 +1,17 @@
 import logging
+import os
+import gdown
+import zipfile
+import shutil
+import yaml
 from PIL import Image, ImageDraw
 import numpy as np
 from os.path import join
 import ipywidgets as widgets
 from IPython.display import display
 import matplotlib.pyplot as plt
+
+
 
 class DataHandler:
     def __init__(self, new_root_dir):
@@ -14,6 +21,60 @@ class DataHandler:
 
     def setup_logging(self):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    def create_directories(self):  
+        os.makedirs(os.path.join(self.new_root_dir, "data", "New_York_City", "LightHouse"), exist_ok=True)
+        os.makedirs(os.path.join(self.new_root_dir, "configs"), exist_ok=True)
+
+    def download_data(self):
+        self.create_directories()
+        
+        files = {
+            "demo_query.png": "17MzPE9TyKiNsi6G59rqLCMMd40cIK3bU",
+            "destination.json": "1sIzFujoumSsVlZqlwwO20l96ZziORP-w",
+            "6th_floor.zip": "139QX5Jo8QkEUlPiWkS_oXpNWZNR4BjPd",
+            "hloc.yaml": "15JYLqU9Y56keMrg9ZfxwfbkbL6_haYpx",
+            "MapConnection_Graph.pkl": "199xZSc9jSajiCqzDW_AzhuqOp_YS41fZ",
+            "maps.zip": "1SWr_DYBUPttx5cLokncz6Pw-5Mm41Jp8"
+        }
+
+        def download_file_from_google_drive(file_id, destination):
+            if not os.path.exists(destination):
+                gdown.download(f'https://drive.google.com/uc?id={file_id}', destination, quiet=False)
+                logging.info(f"Downloaded {destination}")
+            else:
+                logging.info(f"{destination} already exists. Skipping download.")
+
+        for filename, file_id in files.items():
+            logging.info(f"Processing {os.path.join(self.new_root_dir, filename)}")
+            file_path = os.path.join(self.new_root_dir, filename)
+            download_file_from_google_drive(file_id, file_path)
+
+    def rearrange_data(self):
+        zip_files = ["6th_floor.zip", "maps.zip"]
+        for zip_filename in zip_files:
+            with zipfile.ZipFile(os.path.join(self.new_root_dir, zip_filename), 'r') as zip_ref:
+                zip_ref.extractall(self.new_root_dir)
+            logging.info(f"Unzipped {zip_filename}")
+
+            os.remove(os.path.join(self.new_root_dir, zip_filename))
+            logging.info(f"Deleted {zip_filename}")
+
+        shutil.move(os.path.join(self.new_root_dir, "destination.json"), os.path.join(self.new_root_dir, "data"))
+        shutil.move(os.path.join(self.new_root_dir, "hloc.yaml"), os.path.join(self.new_root_dir, "configs", "hloc.yaml"))
+        shutil.move(os.path.join(self.new_root_dir, "MapConnection_Graph.pkl"), os.path.join(self.new_root_dir, "data", "New_York_City", "MapConnection_Graph.pkl"))
+        shutil.move(os.path.join(self.new_root_dir, "6th_floor"), os.path.join(self.new_root_dir, "data", "New_York_City", "LightHouse", "6th_floor"))
+        shutil.move(os.path.join(self.new_root_dir, "maps"), os.path.join(self.new_root_dir, "data", "New_York_City", "maps"))
+
+        with open(os.path.join(self.new_root_dir, "configs", "hloc.yaml"), 'r') as file:
+            config = yaml.safe_load(file)
+        config['IO_root'] = self.new_root_dir
+
+        with open(os.path.join(self.new_root_dir, "configs", "hloc.yaml"), 'w') as file:
+            yaml.safe_dump(config, file)
+
+        logging.info("All files downloaded, unzipped, moved, and hloc.yaml modified successfully.")
+
 
     def show_localization(self, pose):
         floorplan_url = join(self.new_root_dir, 'data', 'New_York_City', 'LightHouse', '6th_floor', 'floorplan.png')
