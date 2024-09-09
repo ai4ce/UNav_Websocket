@@ -4,23 +4,22 @@ import torch
 from utils import DataHandler
 import socket
 
-# try:
-#     from unav import load_data, localization, trajectory, actions
-# except ModuleNotFoundError as e:
-#     print(f"Error: {e}. Please ensure the 'unav' module is installed.")
-#     # Optionally, you can add more handling logic here, such as logging the error or exiting the program.
-
 import io
 import logging
 import base64
 
 import modal
 
-app = modal.App(name="unav-server")
-unav_image = modal.Image.debian_slim().pip_install("unav==0.1.40")
+app = modal.App(name="unav-server-2")
+unav_image = (
+    modal.Image.debian_slim(python_version="3.8")
+    .pip_install("unav==0.1.40")
+)
 
+with unav_image.imports():
+    from unav import load_data, localization, trajectory
 
-@app.cls(image=unav_image)
+@app.cls(cpu=2,image=unav_image)
 class Server(DataHandler):
 
     def __init__(self, config):
@@ -33,7 +32,7 @@ class Server(DataHandler):
         self.map_data = None
         self.localizer = None
         self.trajectory_maker = None
-        with open(os.path.join(self.root, "data", "scale.json"), "r") as f:
+        with open(os.path.join(self.root,  "scale.json"), "r") as f:
             self.scale_data = json.load(f)
 
     def get_scale(self, place, building, floor):
@@ -44,16 +43,25 @@ class Server(DataHandler):
         self.config["location"] = new_config
         self.root = self.config["IO_root"]
 
-    @modal.method()
+    @modal.enter()
+    def load_data(self):
+        try:
+            print('------------ Image Loaded  -----------------------')
+            logging.info("Starting server...")
+            self.map_data = load_data(self.config)
+            self.localizer = localization(self.root, self.map_data, self.config)
+            self.trajectory_maker = trajectory(self.map_data)
+            logging.info("Server started successfully.")
+            
+        except Exception as e:
+            
+            logging.error(f"Error Loading the data: {e}")
+            raise ValueError("Error Loading the data.")
+
+
     def start(self):
         logging.info("Starting server...")
-        from unav import load_data, localization, trajectory
-
-        self.map_data = load_data(self.config)
-        self.localizer = localization(self.root, self.map_data, self.config)
-        self.trajectory_maker = trajectory(self.map_data)
-        logging.info("Server started successfully.")
-
+    
     def terminate(self):
         logging.info("Terminating server...")
         self.map_data = None
@@ -93,6 +101,7 @@ class Server(DataHandler):
     def get_floorplan_and_destinations(self):
         # Ensure map_data is loaded
         if self.map_data is None:
+            print('------------starting-----------------------')
             self.start()
 
         # Load floorplan and destination data
@@ -130,7 +139,7 @@ class Server(DataHandler):
         self.selected_destination_ID = destination_id
         logging.info(f"Selected destination ID set to: {self.selected_destination_ID}")
 
-    @modal.method()
+    # @modal.method()
     def planner(self):
         from unav import actions
 
