@@ -1,0 +1,47 @@
+{
+    "Mahidol_University": {
+        "Ratchasuda": {
+            "1_floor": 0,
+            "2_floor": 0,
+            "3_floor": 0
+        },
+        "OP": {
+            "5_floor": 0
+        }
+    },
+    "New_York_University": {
+        "New_York_University_Hospital": {
+            "17th_floor": 0.02157699999
+        },
+        "Engineering_School_Building_Six": {
+            "4_floor": 0.01209306372,
+            "multifloor_try": 1
+        },
+        "Engineering_School_Building_370": {
+            "9th_floor": 0.02089742634
+        },
+        "LOH": {
+            "Langone10_0": 0,
+            "Langone11_0": 0,
+            "Langone12_0": 0,
+            "Langone1_0": 0,
+            "Langone2_0": 0,
+            "Langone5_0": 0,
+            "Langone6_0": 0,
+            "Langone8_0": 0
+        }
+    },
+    "New_York_City": {
+        "LightHouse": {
+            "3": 0.02205862195,
+            "3_small":0.02205862195,
+            "4_floor": 0.02681116641,
+            "6th_floor": 0.01098358101,
+            "Lighthouse6_2": 0.01098358101,
+            "Lighthouse_1": 0.011935
+        },
+        "NYISE_VC": {
+            "1": 0.1513526317
+        }
+    }
+}

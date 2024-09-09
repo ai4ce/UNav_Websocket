@@ -27,7 +27,7 @@ class Server(DataHandler):
         self.map_data = None
         self.localizer = None
         self.trajectory_maker = None
-        with open(os.path.join(self.root, "data", "scale.json"), "r") as f:
+        with open(os.path.join(self.root,  "scale.json"), "r") as f:
             self.scale_data = json.load(f)
 
     def get_scale(self, place, building, floor):
