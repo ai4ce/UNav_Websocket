@@ -10,11 +10,16 @@ import base64
 
 import modal
 
-app = modal.App(name="unav-server")
-unav_image = modal.Image.debian_slim().pip_install("unav==0.1.40")
+app = modal.App(name="unav-server-2")
+unav_image = (
+    modal.Image.debian_slim(python_version="3.8")
+    .pip_install("unav==0.1.40")
+)
 
+with unav_image.imports():
+    from unav import load_data, localization, trajectory
 
-@app.cls(image=unav_image,cpu=2)
+@app.cls(cpu=2,image=unav_image)
 class Server(DataHandler):
 
     def __init__(self, config):
@@ -38,20 +43,25 @@ class Server(DataHandler):
         self.config["location"] = new_config
         self.root = self.config["IO_root"]
 
-
-    def start(self):
+    @modal.enter()
+    def load_data(self):
         try:
+            print('------------ Image Loaded  -----------------------')
             logging.info("Starting server...")
-            from unav import load_data, localization, trajectory
-
             self.map_data = load_data(self.config)
             self.localizer = localization(self.root, self.map_data, self.config)
             self.trajectory_maker = trajectory(self.map_data)
             logging.info("Server started successfully.")
+            
         except Exception as e:
-            logging.error(f"Error starting server: {e}")
-            raise ValueError("Error starting server.")
+            
+            logging.error(f"Error Loading the data: {e}")
+            raise ValueError("Error Loading the data.")
 
+
+    def start(self):
+        logging.info("Starting server...")
+    
     def terminate(self):
         logging.info("Terminating server...")
         self.map_data = None
@@ -129,7 +139,7 @@ class Server(DataHandler):
         self.selected_destination_ID = destination_id
         logging.info(f"Selected destination ID set to: {self.selected_destination_ID}")
 
-    @modal.method()
+    # @modal.method()
     def planner(self):
         from unav import actions
 

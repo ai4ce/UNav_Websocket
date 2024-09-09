@@ -94,7 +94,8 @@ custom_image = (
     .run_commands("ls")
     .pip_install_from_requirements("requirements.txt")
     .pip_install("kornia")
-    .pip_install('pytorch_lightning')
+    .pip_install("unav==0.1.40")
+    .pip_install("pytorch_lightning")
 )
 
 
