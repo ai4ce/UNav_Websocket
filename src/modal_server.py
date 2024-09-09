@@ -7,7 +7,6 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta
-from utils.data_handler import DataHandler
 # Configure logging
 configure_logging(socketio)
 
@@ -26,8 +25,6 @@ last_activity_time = datetime.now()
 # Inactivity timeout in minutes
 INACTIVITY_TIMEOUT = 30
 
-data_handler = DataHandler('root') # HERE PLEASE MODIFY THR root TO RESPECTIVE VALUE
-
 
 def monitor_inactivity():
     while True:
@@ -44,6 +41,8 @@ monitor_thread.start()
 
 # Define the Modal function with custom image
 app = modal.App(name="unav-server")
+
+volume = modal.Volume.from_name("Data", create_if_missing=True)
 
 custom_image = modal.Image.debian_slim(python_version="3.8").run_commands(
     "apt-get update",
@@ -172,12 +171,9 @@ custom_image = modal.Image.debian_slim(python_version="3.8").run_commands(
     "pip install unav==0.1.40",
 )
 
-
 @app.function(image=custom_image)
 @modal.wsgi_app()
 def run_server():
-    data_handler.download_data()
-    data_handler.rearrange_data()
     flask_app.debug = True
     return flask_app
 

@@ -140,3 +140,6 @@ install_manifest.txt
 *.cmake
 *.cmake.in
 *.db
+
+#testfiles
+test1.py

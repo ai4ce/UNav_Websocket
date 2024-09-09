@@ -246,3 +246,13 @@ Send a **'GET'** request to **`/planner`** to get the navigation path.
 ### Step 7: Terminate Server
 
 Send a **'POST'** request to **`/terminate`** to shut down the server.
+
+
+#### Remote Data setUp:
+
+- Use modalServer_dataSetup.py to set up data in Modal Volumes it store Data in Databse (storage Section Modal instance)
+
+- data can be accesses by annotating you modal remote function like as below 
+`@app.function(volumes={"/files": volume})`
+
+
