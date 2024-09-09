@@ -14,7 +14,7 @@ app = modal.App(name="unav-server")
 unav_image = modal.Image.debian_slim().pip_install("unav==0.1.40")
 
 
-@app.cls(image=unav_image)
+@app.cls(image=unav_image,cpu=2)
 class Server(DataHandler):
 
     def __init__(self, config):
@@ -38,15 +38,19 @@ class Server(DataHandler):
         self.config["location"] = new_config
         self.root = self.config["IO_root"]
 
-    @modal.method()
-    def start(self):
-        logging.info("Starting server...")
-        from unav import load_data, localization, trajectory
 
-        self.map_data = load_data(self.config)
-        self.localizer = localization(self.root, self.map_data, self.config)
-        self.trajectory_maker = trajectory(self.map_data)
-        logging.info("Server started successfully.")
+    def start(self):
+        try:
+            logging.info("Starting server...")
+            from unav import load_data, localization, trajectory
+
+            self.map_data = load_data(self.config)
+            self.localizer = localization(self.root, self.map_data, self.config)
+            self.trajectory_maker = trajectory(self.map_data)
+            logging.info("Server started successfully.")
+        except Exception as e:
+            logging.error(f"Error starting server: {e}")
+            raise ValueError("Error starting server.")
 
     def terminate(self):
         logging.info("Terminating server...")
@@ -87,6 +91,7 @@ class Server(DataHandler):
     def get_floorplan_and_destinations(self):
         # Ensure map_data is loaded
         if self.map_data is None:
+            print('------------starting-----------------------')
             self.start()
 
         # Load floorplan and destination data
