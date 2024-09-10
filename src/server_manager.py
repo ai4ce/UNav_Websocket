@@ -44,7 +44,7 @@ class Server(DataHandler):
         self.root = self.config["IO_root"]
 
     @modal.enter()
-    def load_data(self):
+    def load_unav_data(self):
         try:
             print('------------ Image Loaded  -----------------------')
             logging.info("Starting server...")
