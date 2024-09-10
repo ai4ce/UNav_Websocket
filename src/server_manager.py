@@ -43,10 +43,9 @@ class Server(DataHandler):
         self.config["location"] = new_config
         self.root = self.config["IO_root"]
 
-    @modal.enter()
-    def load_unav_data(self):
+    @modal.method()
+    def start(self):
         try:
-            print('------------ Image Loaded  -----------------------')
             logging.info("Starting server...")
             self.map_data = load_data(self.config)
             self.localizer = localization(self.root, self.map_data, self.config)
@@ -57,10 +56,6 @@ class Server(DataHandler):
             
             logging.error(f"Error Loading the data: {e}")
             raise ValueError("Error Loading the data.")
-
-
-    def start(self):
-        logging.info("Starting server...")
     
     def terminate(self):
         logging.info("Terminating server...")

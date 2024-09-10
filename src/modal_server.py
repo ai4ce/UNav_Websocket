@@ -44,6 +44,8 @@ monitor_thread.start()
 
 app = modal.App(name="unav-server-2")
 
+def download_map_data():
+    pass
 
 custom_image = (
     modal.Image.debian_slim(python_version="3.8")
@@ -96,12 +98,27 @@ custom_image = (
     .pip_install("kornia")
     .pip_install("unav==0.1.40")
     .pip_install("pytorch_lightning")
+    .pip_install("gdown")
+    # .run_function(download_map_data, timeout=60 * 20,)
 )
 
-
-
-@app.function(image=custom_image,mounts=[modal.Mount.from_local_dir("src/", remote_path="/root/")],)
+# @app.cls(image=custom_image,mounts=[modal.Mount.from_local_dir("src/", remote_path="/root/")])
+# class DownloadMapData:
+#     def __init__(self):
+#         self.download_model()
+        
+#     @modal.build()
+#     def download_model(self):
+#         from data_loader import DataHandler
+#         data_handler = DataHandler('/root/UNav-IO/')
+#         data_handler.download_data()
+#         data_handler.extract_data()
+#         print("Building the image")
+#         pass
+    
+@app.function(image=custom_image, mounts=[modal.Mount.from_local_dir("src/", remote_path="/root/")],)
 @modal.wsgi_app()
 def run_server():
+    # image_description = DownloadMapData()
     flask_app.debug = True
     return flask_app
