@@ -43,10 +43,10 @@ class Server(DataHandler):
 
         ############################################# test data #################################################
         # Load and process the specific image for debugging
-        # image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_Good/2023-07-21_13-59-48.png'
-        # image = Image.open(image_path)
+        image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_Good/2023-07-21_13-59-48.png'
+        image = Image.open(image_path)
         
-        # self.image_np = np.array(image)
+        self.image_np = np.array(image)
         ############################################# test data #################################################
         
     def get_scale(self, place, building, floor, session_id):
@@ -95,19 +95,20 @@ class Server(DataHandler):
         location_config=self.config['location']
         floorplan_url = os.path.join(self.new_root_dir, 'data', location_config['place'], building, floor, 'floorplan.png')
         floorplan = Image.open(floorplan_url).convert("RGB")
-        destinations, anchor_dict = self.extract_data(self.config)
+        
+        destinations = self.all_buildings_data.get(building,{}).get(floor,{}).get('destinations',{})
 
+        destinations_data = [
+            {'name': dest_info['name'], 'id': dest_id, 'location': dest_info['location']}
+            for dest_id, dest_info in destinations.items()
+        ]
+        
+        destinations_data = sorted(destinations_data, key=lambda x: x['name'])
+        
         # Convert floorplan image to base64
         buffer = io.BytesIO()
         floorplan.save(buffer, format="PNG")
         floorplan_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-        # Prepare destinations and anchors data
-        anchor_names = list(anchor_dict.keys())
-        anchor_locations = list(anchor_dict.values())
-        
-        destinations_data = [{'name': list(dest.keys())[0], 'id': list(dest.values())[0], 'location': anchor_locations[anchor_names.index(list(dest.values())[0])]} for dest in destinations]
-        anchors_data = list(anchor_dict.values())
 
         if session_id not in self.navigation_states:
             self.navigation_states[session_id] = {
@@ -122,7 +123,6 @@ class Server(DataHandler):
         return {
             'floorplan': floorplan_base64,
             'destinations': destinations_data,
-            'anchors': anchors_data
         }
 
     def select_destination(self, session_id, place, building, floor, destination_id):
@@ -157,7 +157,7 @@ class Server(DataHandler):
         previous_segment_id = state['segment_id']
 
         if state['failures'] >= COARSE_LOCALIZE_THRESHOLD or time_since_last_success > TIMEOUT_SECONDS or not state['segment_id']:
-            segment_id = self.coarse_localize(frame) #debug
+            segment_id = self.coarse_localize(self.image_np) #debug
             if segment_id:
                 # Load the current segment and its neighbors
                 parts = segment_id.split('_')
@@ -170,7 +170,7 @@ class Server(DataHandler):
                 
                 self.refine_locator.update_maps(map_data)
                 
-                pose = self.refine_locator.get_location(frame) #debug
+                pose = self.refine_locator.get_location(self.image_np) #debug
                 
                 if pose:
                     state['pose'] = pose

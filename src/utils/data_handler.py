@@ -247,21 +247,6 @@ class DataHandler:
             print(f"Error loading map segment {segment_file}: {e}")
             return None
 
-    def extract_data(self, config):
-        destination_path=join(config['IO_root'],'data','destination.json')
-        destinations=load_destination(destination_path)
-        
-        location_config=config['location']
-        place = location_config['place']
-        building = location_config['building']
-        floor = location_config['floor']
-        
-        boundary_path=join(config['IO_root'], 'data', place, building, str(floor), 'boundaries_interwaypoint.json')
-        anchor_names,anchor_locations,_=load_boundaires(boundary_path)
-        
-        anchor_dict = dict(zip(anchor_names, anchor_locations))
-        return destinations[place][building]['6th_floor'], anchor_dict
-
 class DemoData(DataHandler):
     def __init__(self, new_root_dir):
         super().__init__(new_root_dir)
