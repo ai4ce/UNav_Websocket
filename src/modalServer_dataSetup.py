@@ -20,11 +20,11 @@ app = modal.App("DataSetup", image=image)
 files = {
     "demo_query.png": "17MzPE9TyKiNsi6G59rqLCMMd40cIK3bU",
     "destination.json": "1sIzFujoumSsVlZqlwwO20l96ZziORP-w",
-    # "6th_floor.zip": "139QX5Jo8QkEUlPiWkS_oXpNWZNR4BjPd",
+    "6th_floor.zip": "139QX5Jo8QkEUlPiWkS_oXpNWZNR4BjPd",
     "hloc.yaml": "15JYLqU9Y56keMrg9ZfxwfbkbL6_haYpx",
     "MapConnection_Graph.pkl": "199xZSc9jSajiCqzDW_AzhuqOp_YS41fZ",
-    # "maps.zip": "1SWr_DYBUPttx5cLokncz6Pw-5Mm41Jp8"
-    "test.zip": "1ztoSgMRai7oFlXT4A-nMZRVSQG9Pf1eX"
+    "maps.zip": "1SWr_DYBUPttx5cLokncz6Pw-5Mm41Jp8"
+    #"test.zip": "1ztoSgMRai7oFlXT4A-nMZRVSQG9Pf1eX"s
 }
 
 @app.function(volumes={"/files": volume})   ## to create necesasry directories 
