@@ -5,10 +5,12 @@ server:
 location:
   place: New_York_City
   building: LightHouse
-  floor: "6th_floor"
+  floor: "6_floor"
   scale: 0.01098358101
 
 IO_root: "/mnt/data/UNav-IO"
+
+devices: "cuda:0"
 
 hloc:
   retrieval_num: 50
@@ -16,13 +18,13 @@ hloc:
   ransac_thre: 30
   # match_type: 'nvs'
   match_type: "lightglue"
-  batch_mode: false
+  batch_mode: true
   map_loading_keyframes_reload: 0
 
 feature:
   global:
     netvlad:
-      ckpt_path: "src/third_party/global_feature/pytorch_NetVlad/netvlad_parameters/log/paper"
+      ckpt_path: "parameters/paper"
       arch: "vgg16"
       vladv2: true
       nocuda: false

@@ -10,6 +10,30 @@ from os.path import join
 import ipywidgets as widgets
 from IPython.display import display
 import matplotlib.pyplot as plt
+import json
+
+def load_destination(path):
+    with open(path, 'r') as f:
+        destinations = json.load(f)
+    return destinations
+
+def load_boundaires(path):
+    with open(path, 'r') as f:
+        data = json.load(f)
+        lines = data['lines']
+        add_lines = data['add_lines']
+        for i in add_lines:
+            lines.append(i)
+        destinations = data['destination']
+        anchor_name,anchor_location=[],[]
+        for k, v in destinations.items():
+            ll = k.split('-')
+            anchor_name.append(v['id'])
+            anchor_location.append([int(ll[0]), int(ll[1])])
+        for k, v in data['waypoints'].items():
+            anchor_name.append(k)
+            anchor_location.append(v['location'])
+    return anchor_name,anchor_location,lines
 
 class DataHandler:
     def __init__(self, new_root_dir):
@@ -91,15 +115,17 @@ class DataHandler:
         floorplan = Image.open(floorplan_url).convert("RGB")
         return floorplan
 
-    def extract_data(self, config, map_data):
-        location_config = config['location']
+    def extract_data(self, config):
+        destination_path=join(config['IO_root'],'data','destination.json')
+        destinations=load_destination(destination_path)
+        
+        location_config=config['location']
         place = location_config['place']
         building = location_config['building']
         floor = location_config['floor']
         
-        destinations = map_data['destinations'][place][building][floor]
-        anchor_names = map_data['anchor_name']
-        anchor_locations = map_data['anchor_location']
+        boundary_path=join(config['IO_root'], 'data', place, building, str(floor), 'boundaries_interwaypoint.json')
+        anchor_names,anchor_locations,_=load_boundaires(boundary_path)
         
         anchor_dict = dict(zip(anchor_names, anchor_locations))
         return destinations, anchor_dict

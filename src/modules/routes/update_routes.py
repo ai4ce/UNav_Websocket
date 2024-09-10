@@ -42,8 +42,10 @@ def register_update_routes(app, server):
         """
         Terminate the server. The server object should have a method to handle this.
         """
+        data = request.get_json()
+        session_id = data.get('session_id') 
         try:
-            server.terminate()
+            server.terminate(session_id)
             return jsonify({'status': 'Server terminated successfully'}), 200
         except Exception as e:
             return jsonify({'error': str(e)}), 500

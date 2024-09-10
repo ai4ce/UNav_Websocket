@@ -3,45 +3,47 @@ from PIL import Image
 import io
 import base64
 import os
+import time
 import cv2
+
+from utils.cache_manager import CacheManager
 
 # This dictionary is used to store frames associated with client sessions
 client_frames = {}
+# This dictionary is used to track localization states
+localization_states = {}
+# This dictionary acts as a simple cache for map segments
+map_cache = {}
+
+# Configuration for localization retries and timeouts
+COARSE_LOCALIZE_THRESHOLD = 5  # Number of failures before doing a coarse localize
+TIMEOUT_SECONDS = 20  # Time since the last successful localize before doing a coarse localize
 
 def register_frame_routes(app, server, socketio):
-
     @app.route('/stream_frame', methods=['POST'])
     def stream_frame():
-        """
-        Handle the streaming of frames from the client.
-        Receives a frame in Base64 format and processes it as needed.
-        """
         data = request.json
         frame_base64 = data.get('frame')
         session_id = data.get('session_id')
-        do_localize = data.get('do_localize', False)  # Whether to perform localization
+        do_localize = data.get('do_localize', False)
 
         if frame_base64 and session_id:
-            # Decode the Base64 encoded frame
             frame_data = base64.b64decode(frame_base64.split(',')[1]) if ',' in frame_base64 else base64.b64decode(frame_base64)
             frame = Image.open(io.BytesIO(frame_data))
-            
-            # Process the frame (convert to BGR, save, etc.)
+
+            # Convert to RGB format
             r, g, b = frame.split()
             frame = Image.merge("RGB", (b, g, r))
             
             if frame is not None:
                 client_frames[session_id] = frame
-
                 response_data = {'status': 'frame received'}
 
                 # Perform localization if requested
                 if do_localize:
-                    pose = server.localize(frame)  # Using the server's method for localization
-                    rounded_pose = [int(coord) for coord in pose] if pose else None
-                    response_data['pose'] = rounded_pose
+                    pose = server.handle_localization(session_id, frame)
+                    response_data['pose'] = pose
 
-                # Optionally send back the processed frame to the client
                 buffered = io.BytesIO()
                 frame.save(buffered, format="JPEG")
                 new_frame_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -84,4 +86,3 @@ def register_frame_routes(app, server, socketio):
             return send_file(image_path, mimetype='image/png')
         else:
             return jsonify({'error': 'Image not found'}), 404
-

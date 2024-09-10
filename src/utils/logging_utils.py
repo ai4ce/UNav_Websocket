@@ -23,3 +23,5 @@ def configure_logging(socketio):
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         socketio_handler.setFormatter(formatter)
         logger.addHandler(socketio_handler)
+    
+    return logger

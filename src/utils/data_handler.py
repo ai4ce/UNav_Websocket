@@ -1,50 +1,277 @@
 import logging
 from PIL import Image, ImageDraw
 import numpy as np
-from os.path import join
+from os import listdir
+from os.path import join, exists, isdir
 import ipywidgets as widgets
 from IPython.display import display
 import matplotlib.pyplot as plt
+import json
+import h5py
+import torch
+from collections import defaultdict
+
+def load_destination(path):
+    with open(path, 'r') as f:
+        destinations = json.load(f)
+    return destinations
+
+def load_boundaires(path):
+    with open(path, 'r') as f:
+        data = json.load(f)
+        lines = data['lines']
+        add_lines = data['add_lines']
+        for i in add_lines:
+            lines.append(i)
+        destinations = data['destination']
+        anchor_name,anchor_location=[],[]
+        for k, v in destinations.items():
+            ll = k.split('-')
+            anchor_name.append(v['id'])
+            anchor_location.append([int(ll[0]), int(ll[1])])
+        for k, v in data['waypoints'].items():
+            anchor_name.append(k)
+            anchor_location.append(v['location'])
+    return anchor_name,anchor_location,lines
 
 class DataHandler:
-    def __init__(self, new_root_dir):
+    def __init__(self, new_root_dir, place):
         self.new_root_dir = new_root_dir
-        self.setup_logging()
-        self.selected_destination_ID = None
+        self.place = place
+        self._setup_logging()
+        self.all_buildings_data, self.all_interwaypoint_connections = self._load_global_graph()
 
-    def setup_logging(self):
+    def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    def show_localization(self, pose):
-        floorplan_url = join(self.new_root_dir, 'data', 'New_York_City', 'LightHouse', '6th_floor', 'floorplan.png')
-        floorplan = Image.open(floorplan_url).convert("RGB")
+    def _get_building_floor(self, segment_id):
+        # Extract building, floor, and segment number from the segment_id
+        parts = segment_id.split('_')
+        building = parts[0]  # Extract building name
+        floor = parts[1] + '_' + parts[2]  # Extract floor name (e.g., '6_floor')
+        segment_number = parts[3] + '_' + parts[4]  # Get the 'Segment_00021' part
+        return building, floor, segment_number
 
-        x1 = pose[0] - 80 * np.sin(pose[2] / 180 * np.pi)
-        y1 = pose[1] - 80 * np.cos(pose[2] / 180 * np.pi)
+    def _load_floor_data(self, floor_dir, floor_name, building):
+        """
+        Load and format waypoints, destinations, and access graph for a given floor.
+        
+        Args:
+            floor_dir (str): Directory path of the floor.
+            floor_name (str): Name of the floor (e.g., '6_floor').
+        
+        Returns:
+            dict: A dictionary containing waypoints, destinations, access graph, and interwaypoints.
+        """
+        boundaries_file = join(floor_dir, 'boundaries_interwaypoint.json')
+        access_graph_file = join(floor_dir, 'access_graph.npy')
+        
+        floor_data = {
+            'waypoints': {},
+            'destinations': {},
+            'access_graph': None,
+            'interwaypoints': []
+        }
+        
+        if exists(boundaries_file):
+            with open(boundaries_file, 'r') as json_file:
+                data = json.load(json_file)
+                floor_data['waypoints'] = data.get('waypoints', {})
+                floor_data['boundaries'] = data.get('lines', []) + data.get('add_lines', [])
+                # Transform the destinations dictionary
+                raw_destinations = data.get('destination', {})
+                transformed_destinations = {}
+                
+                for coordinates, details in raw_destinations.items():
+                    x, y = map(int, coordinates.split('-'))  # Extract x and y from the 'x-y' key
+                    dest_id = details.get('id')
+                    name = details.get('name')
+                    transformed_destinations[dest_id] = {
+                        'location': [x, y],
+                        'name': name
+                    }
+                    
+                floor_data['destinations'] = transformed_destinations  # Assign the transformed data
 
-        draw_floorplan = ImageDraw.Draw(floorplan)
-        draw_floorplan.ellipse((pose[0] - 40, pose[1] - 40, pose[0] + 40, pose[1] + 40), fill=(50, 0, 106))
-        draw_floorplan.line([(pose[0], pose[1]), (x1, y1)], fill=(50, 0, 106), width=20)
+                # Extract interwaypoints (waypoints with type 'interwaypoint')
+                for waypoint_id, details in floor_data['waypoints'].items():
+                    if details.get('type') == 'interwaypoint':
+                        interwaypoint_data = {
+                            'waypoint': waypoint_id,
+                            'location': details.get('location'),
+                            'index': details.get('index'),
+                            'building': building, 
+                            'floor': floor_name
+                        }
+                        floor_data['interwaypoints'].append(interwaypoint_data)
+        
+        if exists(access_graph_file):
+            floor_data['access_graph'] = np.load(access_graph_file)
+        
+        return floor_data
 
-        return floorplan
+    def _load_all_floors_in_building(self, building_dir, building):
+        """
+        Load data from all floors within a building and format it into a dictionary.
+        
+        Args:
+            building_dir (str): Directory where all floor data for a building is stored.
+        
+        Returns:
+            dict: A dictionary containing all floors' data, including waypoints, destinations, access graphs, and interwaypoints.
+            dict: A dictionary mapping interwaypoints by their index to track connections across floors.
+        """
+        all_floors_data = {}
+        interwaypoint_connections = defaultdict(list)
+
+        for floor in listdir(building_dir):
+            floor_dir = join(building_dir, floor)
+            if isdir(floor_dir):
+                floor_data = self._load_floor_data(floor_dir, floor, building)
+                all_floors_data[floor] = floor_data
+
+                for interwaypoint in floor_data['interwaypoints']:
+                    interwaypoint_connections[interwaypoint['index']].append(interwaypoint)
+        
+        return all_floors_data, interwaypoint_connections
+
+    def _load_all_buildings(self, base_dir):
+        """
+        Load data from all buildings and their floors.
+        
+        Args:
+            base_dir (str): Base directory where all building data is stored.
+        
+        Returns:
+            dict: A dictionary containing all buildings' data, including floors, waypoints, destinations, and interwaypoints.
+            dict: A dictionary mapping interwaypoints by their index to track connections across all buildings.
+        """
+        all_buildings_data = {}
+        all_interwaypoint_connections = defaultdict(list)
+
+        for building in listdir(base_dir):
+            building_dir = join(base_dir, building)
+            if isdir(building_dir):
+                all_floors_data, interwaypoint_connections = self._load_all_floors_in_building(building_dir, building)
+                all_buildings_data[building] = all_floors_data
+                
+                for index, connections in interwaypoint_connections.items():
+                    all_interwaypoint_connections[index].extend(connections)
+
+        return all_buildings_data, all_interwaypoint_connections
+
+    def _load_global_graph(self):
+        # Load all buildings and floors
+        base_directory = join(self.new_root_dir, 'data', self.place)
+        all_buildings_data, all_interwaypoint_connections = self._load_all_buildings(base_directory)
+        return all_buildings_data, all_interwaypoint_connections
+
+    def load_graph(self, building, floor):
+        waypoints = self.all_buildings_data[building][floor].get('waypoints',None)
+        destinations = self.all_buildings_data[building][floor].get('destinations',None)
+        access_graph = self.all_buildings_data[building][floor].get('access_graph',None)
+        return destinations, waypoints, access_graph
+    
+    def load_map(self, segment_id):
+        """
+        Load a specific map segment from disk based on the segment ID.
+        Example segment ID format: LightHouse_6_floor_Segment_00021
+        Map file path example: /mnt/data/UNav-IO/data/New_York_City/LightHouse/6_floor/maps/Segment_00021.h5
+        """
+        # Extract building, floor, and segment number from the segment_id
+        building, floor, segment_number = self._get_building_floor(segment_id)
+
+        # Construct the map directory based on the place, building, and floor from the configuration
+        map_directory = join(self.new_root_dir, 'data', self.place, building, floor, 'maps')
+
+        # Define the segment file path
+        segment_file = join(map_directory, f"{segment_number}.h5")
+
+
+        # Initialize a dictionary to store the loaded map data
+        map_data = {
+            'T': None,
+            'rot_base': None,
+            'perspective_frames': {},
+        }
+
+        try:
+            with h5py.File(segment_file, 'r') as h5_file:
+                # Load transformation matrix T
+                map_data['T'] = h5_file['T'][:]
+
+                # Calculate 'rot_base' for future usage (if necessary)
+                T = np.array(map_data['T'])
+                map_data['rot_base'] = np.arctan2(T[1, 0], T[0, 0])
+
+                # Iterate over all the frame groups
+                for frame_name in h5_file.keys():
+                    if frame_name == 'T':
+                        continue  # Skip the transformation matrix
+
+                    # Load the frame data for each frame
+                    frame_group = h5_file[frame_name]
+
+                    # Load global descriptor
+                    global_descriptor = frame_group['global_descriptor'][:]
+
+                    # Load local features
+                    local_features_group = frame_group['local_features']
+                    keypoints = local_features_group['keypoints'][:]
+                    descriptors = local_features_group['descriptors'][:]
+                    image_size = local_features_group['image_size'][:]
+                    scores = local_features_group['scores'][:]
+                    valid_keypoints_index = local_features_group['valid_keypoints_index'][:]
+
+                    # Load landmarks and frame pose
+                    landmarks = frame_group['landmarks'][:]
+                    frame_pose = frame_group['frame_pose'][:]
+
+                    # Add the frame data into the map data dictionary
+                    map_data['perspective_frames'][f'{building}_{floor}_{frame_name}'] = {
+                        'global_descriptor': global_descriptor,
+                        'local_features': {
+                            'keypoints': keypoints,
+                            'descriptors': descriptors,
+                            'image_size': image_size,
+                            'scores': scores,
+                            'valid_keypoints_index': valid_keypoints_index
+                        },
+                        'landmarks': landmarks,
+                        'frame_pose': frame_pose
+                    }
+
+            return map_data
+
+        except Exception as e:
+            print(f"Error loading map segment {segment_file}: {e}")
+            return None
+
+    def extract_data(self, config):
+        destination_path=join(config['IO_root'],'data','destination.json')
+        destinations=load_destination(destination_path)
+        
+        location_config=config['location']
+        place = location_config['place']
+        building = location_config['building']
+        floor = location_config['floor']
+        
+        boundary_path=join(config['IO_root'], 'data', place, building, str(floor), 'boundaries_interwaypoint.json')
+        anchor_names,anchor_locations,_=load_boundaires(boundary_path)
+        
+        anchor_dict = dict(zip(anchor_names, anchor_locations))
+        return destinations[place][building]['6th_floor'], anchor_dict
+
+class DemoData(DataHandler):
+    def __init__(self, new_root_dir):
+        super().__init__(new_root_dir)
+        self.selected_destination_ID = None
 
     def load_floorplan_image(self):
         floorplan_url = join(self.new_root_dir, 'data', 'New_York_City', 'LightHouse', '6th_floor', 'floorplan.png')
         floorplan = Image.open(floorplan_url).convert("RGB")
         return floorplan
-
-    def extract_data(self, config, map_data):
-        location_config = config['location']
-        place = location_config['place']
-        building = location_config['building']
-        floor = location_config['floor']
-        
-        destinations = map_data['destinations'][place][building][floor]
-        anchor_names = map_data['anchor_name']
-        anchor_locations = map_data['anchor_location']
-        anchor_dict = dict(zip(anchor_names, anchor_locations))
-        return destinations, anchor_dict
-
+    
     def plot_floorplan_with_destinations(self, floorplan, destinations, anchor_dict):
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.imshow(floorplan)
@@ -91,9 +318,9 @@ class DataHandler:
             # Save the selected destination ID
             self.selected_destination_ID = selected_name
 
-    def select_destination(self, config, map_data):
+    def select_destination(self, config):
         floorplan = self.load_floorplan_image()
-        destinations, anchor_dict = self.extract_data(config, map_data)
+        destinations, anchor_dict = self.extract_data(config)
         fig, ax = self.plot_floorplan_with_destinations(floorplan, destinations, anchor_dict)
 
         output = widgets.Output()
@@ -118,11 +345,24 @@ class DataHandler:
         vertices = tuple(vertices)
         return vertices
 
+    def show_localization(self, pose):
+        floorplan_url = join(self.new_root_dir, 'data', 'New_York_City', 'LightHouse', '6th_floor', 'floorplan.png')
+        floorplan = Image.open(floorplan_url).convert("RGB")
+
+        x1 = pose[0] - 80 * np.sin(pose[2] / 180 * np.pi)
+        y1 = pose[1] - 80 * np.cos(pose[2] / 180 * np.pi)
+
+        draw_floorplan = ImageDraw.Draw(floorplan)
+        draw_floorplan.ellipse((pose[0] - 40, pose[1] - 40, pose[0] + 40, pose[1] + 40), fill=(50, 0, 106))
+        draw_floorplan.line([(pose[0], pose[1]), (x1, y1)], fill=(50, 0, 106), width=20)
+
+        return floorplan
+    
     def plot_trajectory(self, paths):
         floorplan_url = join(self.new_root_dir, 'data', 'New_York_City', 'LightHouse', '6th_floor', 'floorplan.png')
         floorplan = Image.open(floorplan_url).convert("RGB")
         draw_floorplan = ImageDraw.Draw(floorplan)
-        width, height = floorplan.size
+        width, _ = floorplan.size
         plot_scale = width / 3400
 
         # Plot the trajectory path
@@ -145,4 +385,3 @@ class DataHandler:
         draw_floorplan.polygon(end_vertices, fill='red', outline='red')
 
         return floorplan
-

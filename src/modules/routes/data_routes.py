@@ -80,19 +80,24 @@ def register_data_routes(app, server, socketio):
         place = data.get('place')
         building = data.get('building')
         floor = data.get('floor')
+        session_id = data.get('session_id')
 
-        if not place or not building or not floor:
-            return jsonify({'error': 'Missing place, building, or floor information'}), 400
-
-        scale = server.get_scale(place, building, floor)
+        scale = server.get_scale(place, building, floor, session_id)
         return jsonify({'scale': scale})
 
-    @app.route('/get_floorplan_and_destinations', methods=['GET'])
+    @app.route('/get_floorplan_and_destinations', methods=['POST'])
     def get_floorplan_and_destinations():
         """
         Retrieve the floorplan and available destinations for the current location.
         """
-        floorplan_data = server.get_floorplan_and_destinations()
+        data = request.json
+        
+        place = data.get('place')
+        building = data.get('building')
+        floor = data.get('floor')
+        session_id = data.get('session_id')
+        
+        floorplan_data = server.get_floorplan_and_destinations(session_id, place, building, floor)
         return jsonify(floorplan_data)
 
     @app.route('/select_destination', methods=['POST'])
@@ -100,27 +105,35 @@ def register_data_routes(app, server, socketio):
         """
         Handle the selection of a destination by the client.
         """
-        destination_id = request.json.get('destination_id')
+        data = request.json
+        
+        place = data.get('place')
+        building = data.get('building')
+        floor = data.get('floor')
+        destination_id = data.get('destination_id')
+        session_id = data.get('session_id')
 
         if not destination_id:
             return jsonify({'error': 'Missing destination ID'}), 400
 
-        server.select_destination(destination_id)
+        server.select_destination(session_id, place, building, floor, destination_id)
         return jsonify({'status': 'success'})
 
-    @app.route('/planner', methods=['GET'])
+    @app.route('/planner', methods=['POST'])
     def planner():
         """
         Handle a planning request, providing a path and action list based on the current setup.
         """
-        try:
-            paths, action_list = server.planner()
-            rounded_paths = [
-                [int(point[0]), int(point[1])] if len(point) == 2 else [int(point[0]), int(point[1]), point[2]]
-                for point in paths
-            ]
-            floorplan_data = server.get_floorplan_and_destinations()
-            socketio.emit('planner_update', {'paths': rounded_paths, 'floorplan': floorplan_data['floorplan']})
-            return jsonify({'paths': rounded_paths, 'floorplan': floorplan_data['floorplan'], 'actions': action_list})
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 400
+        # try:
+        data = request.json
+        session_id = data.get('session_id')
+        
+        paths, action_list = server.handle_navigation(session_id)
+        rounded_paths = [
+            [int(point[0]), int(point[1])] if len(point) == 2 else [int(point[0]), int(point[1]), point[2]]
+            for point in paths
+        ]
+        socketio.emit('planner_update', {'paths': rounded_paths})
+        return jsonify({'paths': rounded_paths, 'actions': action_list})
+        # except ValueError as e:
+        #     return jsonify({'error': str(e)}), 400
