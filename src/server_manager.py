@@ -227,9 +227,8 @@ class Server(DataHandler):
         localization_state = self.localization_states.get(session_id)
         pose = localization_state.get('pose')
         if pose:
-            path_list = self.trajectory_maker.calculate_path(localization_state)
-            action_list = actions(pose, path_list, float(self.navigation_states[session_id]['scale']))
-            paths = [pose[:2]] + path_list
-            return paths, action_list
+            trajectory = self.trajectory_maker.calculate_path(localization_state)
+            # action_list = actions(pose, path_list, float(self.navigation_states[session_id]['scale']))
+            return trajectory
         else:
             return [], [], None

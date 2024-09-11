@@ -1,13 +1,89 @@
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
 from UNav_core.src.loader import data_loader
-
+from collections import defaultdict, deque
+import math
 
 class Trajectory():
     def __init__(self, all_buildings_data, all_interwaypoint_connections):
         self.all_buildings_data = all_buildings_data
         self.all_interwaypoint_connections = all_interwaypoint_connections
-                
+        self.precalculated_inter_paths = self._precalculated_inter_paths()
+        self.precalculated_global_paths = self._precalculate_global_paths()
+
+    def _find_all_paths(self, current_building, current_floor, dest_building, dest_floor):
+        paths = []
+
+        # Helper function to get valid next waypoints
+        def get_next_waypoints(current_waypoint, visited):
+            next_waypoints = []
+            for inter_id, waypoints in self.all_interwaypoint_connections.items():
+                for waypoint in waypoints:
+                    # Check if it's a valid transition (same building/floor or connected via interwaypoints)
+                    if waypoint['building'] == current_waypoint['building'] and waypoint['floor'] == current_waypoint['floor']:
+                        if waypoint['waypoint'] != current_waypoint['waypoint'] and waypoint not in visited:
+                            next_waypoints.append(waypoint)
+                    elif waypoint['id'] == current_waypoint['id'] and waypoint not in visited:
+                        next_waypoints.append(waypoint)
+            return next_waypoints
+        
+        # BFS search for paths
+        queue = deque()
+
+        # Enqueue all interwaypoints in the current building and floor
+        for inter_id, waypoints in self.all_interwaypoint_connections.items():
+            for waypoint in waypoints:
+                if waypoint['building'] == current_building and waypoint['floor'] == current_floor:
+                    queue.append((waypoint, [waypoint], defaultdict(int)))  # (current_waypoint, path_so_far, id_count)
+
+        while queue:
+            current_waypoint, path_so_far, id_count = queue.popleft()
+
+            # Update the count of the current waypoint's id
+            id_count[current_waypoint['id']] += 1
+            
+            # If any id is visited more than twice, skip this path
+            if id_count[current_waypoint['id']] > 2:
+                continue
+
+            # If we've reached the destination building and floor, check if the path is valid
+            if current_waypoint['building'] == dest_building and current_waypoint['floor'] == dest_floor:
+                # Ensure each id has been visited exactly twice
+                if all(count == 2 for count in id_count.values()):
+                    paths.append(path_so_far)
+                continue
+            
+            # Get next valid waypoints
+            next_waypoints = get_next_waypoints(current_waypoint, path_so_far)
+            for next_waypoint in next_waypoints:
+                # Pass along the current id_count dictionary
+                new_id_count = id_count.copy()
+                queue.append((next_waypoint, path_so_far + [next_waypoint], new_id_count))
+        
+        return paths
+
+    # Function to precalculate all possible paths between every building and floor combination
+    def _precalculate_global_paths(self):
+        # Store the precalculated paths
+        precalculated_paths = defaultdict(dict)
+
+        # Use keys from self.all_buildings_data to get all building and floor combinations
+        for current_building, floors in self.all_buildings_data.items():
+            for current_floor, _ in floors.items():
+                for dest_building, dest_floors in self.all_buildings_data.items():
+                    for dest_floor, _ in dest_floors.items():
+                        # Skip if the start and destination are the same
+                        if current_building == dest_building and current_floor == dest_floor:
+                            continue
+
+                        # Calculate all paths between the start and destination
+                        paths = self._find_all_paths(current_building, current_floor, dest_building, dest_floor)
+
+                        # Store the result
+                        precalculated_paths[(current_building, current_floor)][(dest_building, dest_floor)] = paths
+
+        return precalculated_paths
+    
     def update_destination_graph(self, navigation_states):
         self.destination_place = navigation_states['Place']
         self.destination_building = navigation_states['Building']
@@ -19,7 +95,9 @@ class Trajectory():
         self.destination_waypoints = floor_data.get('waypoints')
         self.destination_M = floor_data.get('access_graph')
         self.destination_interwaypoints = floor_data.get('interwaypoints')
-        
+
+        destination_anchor_location = self._form_anchor_points(floor_data.get('destinations'), floor_data.get('waypoints'))
+
         selected_destination_ID = navigation_states['Selected_destination_ID']
         destination_info = floor_data.get('destinations').get(selected_destination_ID)
         
@@ -30,6 +108,35 @@ class Trajectory():
                 if dest_id == selected_destination_ID:
                     self.destination_index = idx
                     break
+                
+        _, Pr = shortest_path(self.destination_M, directed=True, method='FW', return_predecessors=True)
+        
+        self.dest_from_inter = defaultdict(dict)
+        for interwaypoint in self.destination_interwaypoints:
+            self.dest_from_inter[interwaypoint['index']] = self._trace_back_path(Pr, destination_anchor_location, interwaypoint['index'], self.destination_index)
+            
+    def _precalculated_inter_paths(self):
+        path_between_interwaypoints = defaultdict(dict)
+        
+        for building, building_data  in self.all_buildings_data.items():
+            for floor, floor_data  in building_data.items():
+                
+                current_M = floor_data.get('access_graph')
+                _, Pr = shortest_path(current_M, directed=True, method='FW', return_predecessors=True)
+                
+                interwaypoints = floor_data.get('interwaypoints')
+                
+                interwaypoints_index_in_floor = [interwaypoint.get('index') for interwaypoint in interwaypoints]
+                
+                anchor_location =  self._form_anchor_points(floor_data.get('destinations'), floor_data.get('waypoints'))
+                
+                for current_index in interwaypoints_index_in_floor:
+                    for target_index in interwaypoints_index_in_floor:
+                        if current_index < target_index:
+                            path_between_interwaypoints[(building, floor)][(current_index, target_index)] = self._trace_back_path(Pr, anchor_location, current_index, target_index)
+                            path_between_interwaypoints[(building, floor)][(target_index, current_index)] = path_between_interwaypoints[(building, floor)][(current_index, target_index)]
+                            
+        return path_between_interwaypoints
     
     def _form_anchor_points(self, destinations, waypoints):
         """
@@ -68,67 +175,86 @@ class Trajectory():
                 return 0
         return np.linalg.norm(np.array(c) - np.array(d))
 
+    def _calculate_trajectory_length(self, points):
+        total_length = 0.0
+        
+        # Iterate over the list of points, calculating distance between consecutive pairs
+        for i in range(1, len(points)):
+            x1, y1 = points[i - 1]
+            x2, y2 = points[i]
+            
+            # Calculate the Euclidean distance between consecutive points
+            distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            
+            # Add to the total length
+            total_length += distance
+        
+        return total_length
+    
     def calculate_path(self, localization_states):
-        self.current_building = localization_states['building']
-        self.current_floor = localization_states['floor']
-        self.current_pose = localization_states['pose']
+        current_building = localization_states['building']
+        current_floor = localization_states['floor']
+        current_pose = localization_states['pose']
         
-        floor_data = self.all_buildings_data.get(self.current_building, {}).get(self.current_floor, {})
-        
+        floor_data = self.all_buildings_data.get(current_building, {}).get(current_floor, {})
         self.current_bounderies = floor_data.get('boundaries')
         self.current_waypoints = floor_data.get('waypoints')
         self.current_M = floor_data.get('access_graph')
         self.current_interwaypoints = floor_data.get('interwaypoints')
         
-        self.anchor_location = self._form_anchor_points(floor_data.get('destinations'), floor_data.get('waypoints'))
+        current_anchor_location = self._form_anchor_points(floor_data.get('destinations'), floor_data.get('waypoints'))
         
         # Update the access graph matrix for the current pose
-        for i, loc in enumerate(self.anchor_location):
-            self.current_M[i, -1] = self._distance(self.current_pose[:2], loc)
+        for i, loc in enumerate(current_anchor_location):
+            self.current_M[i, -1] = self._distance(current_pose[:2], loc)
         
         # Find shortest path within current floor using Floyd-Warshall
         _, Pr = shortest_path(self.current_M, directed=True, method='FW', return_predecessors=True)
         
+        trajectory = defaultdict(dict)
+        
         # If current building and floor match the destination, calculate shortest path directly
-        if self.current_building == self.destination_building and self.current_floor == self.destination_floor and self.destination_index:
-            return self._trace_back_path(Pr, self.destination_index)
-
-        # If not, calculate the optimal inter-floor or inter-building path
-        optimal_path = []
-        
-        # Get interwaypoints on the current and destination floors
-        interwaypoints_current = self._get_interwaypoints_for_floor(self.current_floor, self.current_building)
-        interwaypoints_destination = self._get_interwaypoints_for_floor(self.destination_floor, self.destination_building)
-        
-        # Compute the shortest path from the current pose to each interwaypoint on the current floor
-        shortest_interwaypoint_path = None
-        for interwaypoint in interwaypoints_current:
-            interwaypoint_index = self._get_waypoint_index(interwaypoint['waypoint'], self.anchor_location)
-            path_to_interwaypoint = self._trace_back_path(Pr, interwaypoint_index)
+        if (current_building, current_floor) == (self.destination_building, self.destination_floor) and self.destination_index:
+            trajectory['destination'] = [[current_pose[0], current_pose[1]]] + self._trace_back_path(Pr, current_anchor_location, -1, self.destination_index)
+        else:
+            possible_paths = self.precalculated_global_paths.get((current_building, current_floor), {}).get((self.destination_building, self.destination_floor), {})
             
-            # Calculate the path from the interwaypoint on the destination floor to the destination
-            path_from_interwaypoint_to_dest = self._calculate_path_from_interwaypoint_to_dest(interwaypoint, interwaypoints_destination)
+            min_diatance = float('inf')
             
-            # Combine the two paths
-            total_path = path_to_interwaypoint + path_from_interwaypoint_to_dest
+            for path_candidate in possible_paths:
+                enter_id = set()
+                local_trajectory = defaultdict(dict)
+                distance = 0
+                for step, step_info in enumerate(path_candidate):
+                    inter_name = step_info.get('name')
+                    floor = step_info.get('floor')
+                    building = step_info.get('building')
+                    if step == 0:
+                        current_to_interwaypoints = [[current_pose[0], current_pose[1]]] + self._trace_back_path(Pr, current_anchor_location, -1, step_info.get('index'))
+                        distance += self._calculate_trajectory_length(current_to_interwaypoints)
+                        local_trajectory[(building, floor, inter_name)] = current_to_interwaypoints
+                    elif step == len(path_candidate) - 1:
+                        interwaypoints_to_dest = self.dest_from_inter.get(step_info.get('index'))
+                        distance += self._calculate_trajectory_length(interwaypoints_to_dest)
+                        local_trajectory[(building, floor, 'destination')] = interwaypoints_to_dest
+                    else:
+                        inter_id = step_info.get('id')
+                        inter_index = step_info.get('index')
+                        if inter_id not in enter_id:
+                            enter_id.add(inter_index)
+                            building = step_info.get('building')
+                            floor = step_info.get('floor')
+                            target_index = step_info.get('index')
+                            inter_paths = self.precalculated_inter_paths.get((building, floor)).get((current_index, target_index))
+                            distance += self._calculate_trajectory_length(inter_paths)
+                            local_trajectory[(building, floor, inter_name)] = inter_paths
+                        else:
+                            current_index = step_info.get('index')
+                if distance < min_diatance:
+                    min_diatance = distance
+                    trajectory = local_trajectory
+        return trajectory
             
-            # Select the shortest path
-            if not shortest_interwaypoint_path or len(total_path) < len(shortest_interwaypoint_path):
-                shortest_interwaypoint_path = total_path
-
-        return shortest_interwaypoint_path
-
-    def _get_interwaypoints_for_floor(self, floor, building):
-        """
-        Get interwaypoints that belong to a specific floor and building.
-        """
-        interwaypoints = []
-        for connection in self.all_interwaypoint_connections.values():
-            for interwaypoint in connection:
-                if interwaypoint['floor'] == floor and interwaypoint['building'] == building:
-                    interwaypoints.append(interwaypoint)
-        return interwaypoints
-
     def _get_waypoint_index(self, waypoint_id, anchor_points):
         """
         Get the index of a waypoint in the anchor points list.
@@ -138,7 +264,7 @@ class Trajectory():
                 return idx
         return None
 
-    def _trace_back_path(self, predecessors, destination_index):
+    def _trace_back_path(self, predecessors, locations, current_index, destination_index):
         """
         Trace back the path from the destination index using the predecessor matrix.
         """
@@ -147,9 +273,9 @@ class Trajectory():
         index = destination_index
         predecessors=predecessors[index]
         
-        index=predecessors[-1]
+        index=predecessors[current_index]
         while index!=-9999:
-            path_list.append(self.anchor_location[index])
+            path_list.append(locations[index])
             index=predecessors[index]
 
         return path_list

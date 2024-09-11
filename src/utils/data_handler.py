@@ -82,6 +82,7 @@ class DataHandler:
                 raw_destinations = data.get('destination', {})
                 transformed_destinations = {}
                 
+                destination_num = 0
                 for coordinates, details in raw_destinations.items():
                     x, y = map(int, coordinates.split('-'))  # Extract x and y from the 'x-y' key
                     dest_id = details.get('id')
@@ -90,18 +91,21 @@ class DataHandler:
                         'location': [x, y],
                         'name': name
                     }
+                    destination_num += 1
                     
                 floor_data['destinations'] = transformed_destinations  # Assign the transformed data
 
                 # Extract interwaypoints (waypoints with type 'interwaypoint')
-                for waypoint_id, details in floor_data['waypoints'].items():
+                for ind, (waypoint_id, details) in enumerate(floor_data['waypoints'].items()):
                     if details.get('type') == 'interwaypoint':
                         interwaypoint_data = {
                             'waypoint': waypoint_id,
                             'location': details.get('location'),
-                            'index': details.get('index'),
+                            'id': details.get('index'),
+                            'index': destination_num + ind,
                             'building': building, 
-                            'floor': floor_name
+                            'floor': floor_name,
+                            'name': details.get('name')
                         }
                         floor_data['interwaypoints'].append(interwaypoint_data)
         
@@ -131,7 +135,7 @@ class DataHandler:
                 all_floors_data[floor] = floor_data
 
                 for interwaypoint in floor_data['interwaypoints']:
-                    interwaypoint_connections[interwaypoint['index']].append(interwaypoint)
+                    interwaypoint_connections[interwaypoint['id']].append(interwaypoint)
         
         return all_floors_data, interwaypoint_connections
 
