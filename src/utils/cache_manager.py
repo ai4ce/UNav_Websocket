@@ -66,7 +66,7 @@ class CacheManager:
                 combined_segments[building_floor]['T'] = cached_map['T']
                 combined_segments[building_floor]['rot_base'] = cached_map['rot_base']
 
-        return combined_segments[building_floor]
+        return combined_segments[list(combined_segments.keys())[0]]
 
     def release_segments(self, session_id, segment_ids):
         """

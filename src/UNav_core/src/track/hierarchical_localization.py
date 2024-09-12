@@ -213,9 +213,9 @@ class Hloc():
         with torch.inference_mode():  # Use torch.no_grad during inference
             image_np = np.array(image)
             feats0 = self.local_feature_extractor(image_np)
-            pts0_list,pts1_list,lms_list,max_len=self.local_feature_matcher.lightglue_batch(topk[0], feats0)
+            valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len=self.local_feature_matcher.lightglue_batch(self, topk[0], feats0)
 
-        return pts0_list,pts1_list,lms_list,max_len
+        return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
 
     def feature_matching_lightglue(self,image,topk):
         """
@@ -264,7 +264,7 @@ class Hloc():
         torch.cuda.empty_cache()
         return pts0_list,pts1_list,lms_list,max_len
 
-    def geometric_verification(self, pts0_list, pts1_list, lms_list, max_len):
+    def geometric_verification(self, valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len):
         """
         Geometric verification:
             Apply geometric verification between query and database images
@@ -284,36 +284,37 @@ class Hloc():
             
         pts0, pts1, lms, mask = pts0.to(self.device), pts1.to(self.device), lms.to(self.device), mask.to(self.device)
         
-        try:
-            _, inliners, _ = ransac(pts0, pts1, mask)
-            diag_masks = torch.diagonal(inliners, dim1=-2, dim2=-1)
+        # try:
+        _, inliners, _ = ransac(pts0, pts1, mask)
+        diag_masks = torch.diagonal(inliners, dim1=-2, dim2=-1)
 
-            # Calculate sizes for each item in the batch
-            sizes = diag_masks.sum(-1)
+        # Calculate sizes for each item in the batch
+        sizes = diag_masks.sum(-1)
 
-            # Filtering based on the threshold
-            valid_indices = sizes > self.thre
+        # Filtering based on the threshold
+        valid_indices = sizes > self.thre
 
-            # Apply thresholding
-            diag_masks = diag_masks[valid_indices]
-            pts0 = pts0[valid_indices]
-            lms = lms[valid_indices]
+        # Apply thresholding
+        diag_masks = diag_masks[valid_indices]
+        final_candidates = [name for name, valid in zip(valid_db_frame_name, valid_indices.cpu().numpy()) if valid]
+        pts0 = pts0[valid_indices]
+        lms = lms[valid_indices]
 
-            # Masking pts0, pts1, and lms
-            masked_pts0 = [pts0[i][diag_masks[i]] for i in range(pts0.size(0))]
-            masked_lms = [lms[i][diag_masks[i]] for i in range(lms.size(0))]
+        # Masking pts0, pts1, and lms
+        masked_pts0 = [pts0[i][diag_masks[i]] for i in range(pts0.size(0))]
+        masked_lms = [lms[i][diag_masks[i]] for i in range(lms.size(0))]
 
-            del pts0, pts1, lms, mask
-            torch.cuda.empty_cache()
-            
-            if len(masked_pts0) > 0:
-                return torch.cat(masked_pts0), torch.cat(masked_lms)
-            else:
-                return torch.tensor([]), torch.tensor([])
-        except:
-            del pts0, pts1, lms, mask
-            torch.cuda.empty_cache()
-            return torch.tensor([]), None
+        del pts0, pts1, lms, mask
+        torch.cuda.empty_cache()
+        
+        if len(masked_pts0) > 0:
+            return final_candidates, torch.cat(masked_pts0), torch.cat(masked_lms)
+        else:
+            return [], torch.tensor([]), None
+        # except:
+        #     del pts0, pts1, lms, mask
+        #     torch.cuda.empty_cache()
+        #     return None, torch.tensor([]), None
 
 
     def pnp(self,image,feature2D,landmark3D):
@@ -343,10 +344,28 @@ class Hloc():
             self.logger.warning("!!!Cannot localize at this point, please take some steps or turn around!!!")
         return pose
 
+    def _determine_next_segment(self, candidates):
+        candidate_histogram = {}
+        max_counts = 0
+        next_segment_id = None
+        for candidate in candidates:
+            segment_id = self.map_data['perspective_frames'][candidate].get('segment_id')
+            if segment_id in candidate_histogram:
+                candidate_histogram[segment_id] += 1
+            else:
+                candidate_histogram[segment_id] = 1
+            if candidate_histogram[segment_id] > max_counts:
+                max_counts = candidate_histogram[segment_id]
+                next_segment_id = segment_id
+        
+        return next_segment_id
+            
     def get_location(self, image):
         self.logger.debug("Start image retrieval")
         topk=self.global_retrieval(image)
-
+        valid_db_frame_name = []
+        next_segment_id = None
+        
         if self.match_type=='superglue':
             self.logger.debug("Matching local feature")
             pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_superglue(image,topk)
@@ -356,14 +375,14 @@ class Hloc():
         elif self.match_type=='lightglue':
             self.logger.debug("Matching local feature")
             if self.batch_mode:
-                pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue_batch(image,topk)
+                valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue_batch(image,topk)
             else:
                 pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
             self.logger.debug("Start geometric verification")
-            feature2D,landmark3D=self.geometric_verification(pts0_list, pts1_list, lms_list, max_matched_num)
-            
+            final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
+            next_segment_id = self._determine_next_segment(final_candidates)
 
         self.logger.debug("Estimate the camera pose using PnP algorithm")
         pose=self.pnp(image,feature2D,landmark3D)
 
-        return pose
+        return pose, next_segment_id

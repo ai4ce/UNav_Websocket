@@ -1,7 +1,7 @@
 import os
 import json
-import torch
 from utils import DataHandler, CacheManager
+
 import time
 
 import socket
@@ -36,34 +36,30 @@ class Server(DataHandler):
         
         self.cache_manager = CacheManager()
         self.localization_states = {}
-        self.navigation_states = {}
+        self.destination_states = {}
         
         with open(os.path.join(self.root, 'data', 'scale.json'), 'r') as f:
             self.scale_data = json.load(f)
 
         ############################################# test data #################################################
         # Load and process the specific image for debugging
-        image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_Good/2023-07-21_13-59-48.png'
-        image = Image.open(image_path)
+        # image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_Good/2023-07-21_13-59-48.png'
+        # image = Image.open(image_path)
         
-        self.image_np = np.array(image)
+        # self.image_np = np.array(image)
         ############################################# test data #################################################
         
-    def get_scale(self, place, building, floor, session_id):
-        scale = self.scale_data.get(self.config['location']['place'], {}).get(building, {}).get(floor, 0.1)
-        if session_id not in self.navigation_states:
-            self.navigation_states[session_id] = {
-                'Place': place,
-                'Building': building,
-                'Floor': floor,
-                'scale': scale
-            }
-        else:
-            self.navigation_states[session_id]['scale'] = scale
-        return scale
     
     def update_config(self, new_config):
         # Merge the new configuration with the existing one
+        
+        place = new_config.get('place')
+        building = new_config.get('building')
+        floor = new_config.get('floor')
+        
+        new_scale = self.scale_data.get(place, {}).get(building, {}).get(floor, None)
+        new_config['scale'] = new_scale
+        
         self.config['location'] = new_config
         self.root = self.config["IO_root"]
 
@@ -73,13 +69,17 @@ class Server(DataHandler):
         segment_id = self.localization_states.get(session_id, {}).get('segment_id', None)
         
         if segment_id:
-            current_neighbors = list(self.coarse_locator.connection_graph.get(segment_id, set()))
+            connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
+            current_neighbors = list(connection_data.get('adjacent_segment'))
             segments_to_release = [segment_id] + current_neighbors
             self.cache_manager.release_segments(session_id, segments_to_release)
             del self.localization_states[session_id]
             
-        if session_id in self.navigation_states:
-            del self.navigation_states[session_id]
+            if session_id in self.destination_states:
+                del self.destination_states[session_id]
+            
+            if session_id in self.trajectory_maker.sessions:
+                del self.trajectory_maker.sessions[session_id]
             
         self.logger.info(f"Session of {session_id} terminated successfully.")
 
@@ -90,12 +90,23 @@ class Server(DataHandler):
         else:
             return None
 
-    def get_floorplan_and_destinations(self, session_id, place, building, floor):
-        # Load floorplan and destination data
+    def get_floorplan(self, building, floor):
+        # Load floorplan data
         location_config=self.config['location']
         floorplan_url = os.path.join(self.new_root_dir, 'data', location_config['place'], building, floor, 'floorplan.png')
         floorplan = Image.open(floorplan_url).convert("RGB")
+
+        # Convert floorplan image to base64
+        buffer = io.BytesIO()
+        floorplan.save(buffer, format="PNG")
+        floorplan_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+        return {
+            'floorplan': floorplan_base64,
+        }
         
+    def get_destinations_list(self, building, floor):
+        # Load destination data
         destinations = self.all_buildings_data.get(building,{}).get(floor,{}).get('destinations',{})
 
         destinations_data = [
@@ -104,39 +115,20 @@ class Server(DataHandler):
         ]
         
         destinations_data = sorted(destinations_data, key=lambda x: x['name'])
-        
-        # Convert floorplan image to base64
-        buffer = io.BytesIO()
-        floorplan.save(buffer, format="PNG")
-        floorplan_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-        if session_id not in self.navigation_states:
-            self.navigation_states[session_id] = {
-                'Place': place,
-                'Building': building,
-                'Floor': floor,
-                'floorplan_base64': floorplan_base64
-            }
-        else:
-            self.navigation_states[session_id]['floorplan_base64'] = floorplan_base64
             
         return {
-            'floorplan': floorplan_base64,
             'destinations': destinations_data,
         }
 
     def select_destination(self, session_id, place, building, floor, destination_id):
-        if session_id not in self.navigation_states:
-            self.navigation_states[session_id] = {
-                'Place': place,
-                'Building': building,
-                'Floor': floor,
-                'Selected_destination_ID': destination_id
-            }
-        else:
-            self.navigation_states[session_id]['Selected_destination_ID'] = destination_id
-            
-        self.trajectory_maker.update_destination_graph(self.navigation_states[session_id])
+        self.destination_states[session_id] = {
+            'Place': place,
+            'Building': building,
+            'Floor': floor,
+            'Selected_destination_ID': destination_id
+        }
+        
+        self.trajectory_maker.update_destination_graph(session_id, self.destination_states[session_id])
         
         self.logger.info(f"Selected destination ID set to: {destination_id}")
 
@@ -146,39 +138,83 @@ class Server(DataHandler):
         images = {id: os.listdir(os.path.join(base_path, id, 'images')) for id in ids if os.path.isdir(os.path.join(base_path, id, 'images'))}
         return images
     
+    def _split_id(self, segment_id):
+        # Load the current segment and its neighbors
+        parts = segment_id.split('_')
+        building = parts[0]  # Extract building name
+        floor = parts[1] + '_' + parts[2]  # Extract floor name (e.g., '6_floor')
+        return building, floor
+    
+    def _update_next_step(self):
+        pass
+    
     def handle_localization(self, session_id, frame):
         """
         Handles the localization process for a given session and frame.
         Returns the pose and segment_id if localization is successful.
         """
         state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
-
+        
+        pose_update_info = {
+            'pose': None,
+            'floorplan_base64': None
+        }
+        
         time_since_last_success = time.time() - state['last_success_time']
         previous_segment_id = state['segment_id']
 
         if state['failures'] >= COARSE_LOCALIZE_THRESHOLD or time_since_last_success > TIMEOUT_SECONDS or not state['segment_id']:
-            segment_id = self.coarse_localize(self.image_np) #debug
+            segment_id = self.coarse_localize(frame) #debug
             if segment_id:
-                # Load the current segment and its neighbors
-                parts = segment_id.split('_')
-                building = parts[0]  # Extract building name
-                floor = parts[1] + '_' + parts[2]  # Extract floor name (e.g., '6_floor')
-            
-                current_neighbors = list(self.coarse_locator.connection_graph.get(segment_id, set()))
                 
-                map_data = self.cache_manager.load_segments(self, session_id, [segment_id] + current_neighbors)
+                building, floor = self._split_id(segment_id)
+
+                connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
+                current_neighbors = list(connection_data.get(segment_id, set()))
+                
+                current_cluster = [segment_id] + current_neighbors
+                
+                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
                 
                 self.refine_locator.update_maps(map_data)
                 
-                pose = self.refine_locator.get_location(self.image_np) #debug
+                pose, next_segment_id = self.refine_locator.get_location(frame) #debug
                 
+
                 if pose:
+                    pose_update_info['pose'] = pose
+                    
                     state['pose'] = pose
                     state['segment_id'] = segment_id
-                    state['floor'] = floor
-                    state['building'] = building
                     state['failures'] = 0
                     state['last_success_time'] = time.time()
+                    
+                    # if building != state['building'] or floor != state['floor']:
+                    pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+                        
+                    state['floor'] = floor
+                    state['building'] = building
+                    
+                    if state['segment_id']:
+                        # judge if need switch segments
+                        if next_segment_id != state['segment_id']:
+                            
+                            next_building, next_floor = self._split_id(next_segment_id)
+                            state['segment_id'] = next_segment_id
+                            
+                            # if next_building != state['building'] or next_floor != state['floor']:
+                            pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                                
+                            
+                            # delete old segments in cache
+                            next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                            segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                            self.cache_manager.release_segments(session_id, segments_to_release)
+                            
+                                
+                            state['building'] = next_building
+                            state['floor'] = next_floor
+                        
                 else:
                     state['pose'] = None
                     state['segment_id'] = None
@@ -188,23 +224,43 @@ class Server(DataHandler):
                     
                 # Release previous segment and its neighbors if they are no longer in use
                 if previous_segment_id and previous_segment_id != segment_id:
-                    previous_neighbors = list(self.coarse_locator.connection_graph.get(previous_segment_id, set()))
-                    segments_to_release = [previous_segment_id] + previous_neighbors
+                    previous_neighbors = list(self.coarse_locator.connection_graph.get(previous_segment_id, {}).get('adjacent_segment'), set())
+                    segments_to_release = list(set([previous_segment_id] + previous_neighbors) - set(current_cluster))
                     self.cache_manager.release_segments(session_id, segments_to_release)
             else:
                 state['failures'] += 1
-                return None, None
-        else:  
+
+        else:      
             # Retrieve the current segment and its neighbors from the cache
-            current_neighbors = list(self.coarse_locator.connection_graph.get(state['segment_id'], set()))
+            connection_data = self.coarse_locator.connection_graph.get(state['segment_id'], {})
+            current_neighbors = list(connection_data.get('adjacent_segment', set()))
+            current_cluster = [state['segment_id']] + current_neighbors
             
-            map_data = self.cache_manager.load_segments(self, session_id, [state['segment_id']] + current_neighbors)
+            map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
 
             self.refine_locator.update_maps(map_data)
             
-            pose = self.refine_locator.get_location(self.image_np)
+            pose, next_segment_id = self.refine_locator.get_location(frame) #debug
             
             if pose:
+
+                # judge if need switch segments
+                next_building, next_floor = self._split_id(next_segment_id)
+                state['building'] = next_building
+                state['floor'] = next_floor
+                if next_segment_id != state['segment_id']:
+                    state['segment_id'] = next_segment_id
+                    # if next_building != state['building'] or next_floor != state['floor']:
+                    pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                        
+                    # delete old segments in cache
+                    next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                    segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                    self.cache_manager.release_segments(session_id, segments_to_release)
+
+                pose_update_info['pose'] = pose
+                
+                pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
                 state['pose'] = pose
                 state['failures'] = 0
                 state['last_success_time'] = time.time()
@@ -215,10 +271,10 @@ class Server(DataHandler):
                 state['failures'] += 1
 
         self.localization_states[session_id] = state
-        return pose
+        return pose_update_info
     
     def handle_navigation(self, session_id):
-        if session_id not in self.navigation_states:
+        if session_id not in self.destination_states:
             self.logger.error("Selected destination ID is not set.")
             raise ValueError("Selected destination ID is not set.")
         if session_id not in self.localization_states:
@@ -227,8 +283,12 @@ class Server(DataHandler):
         localization_state = self.localization_states.get(session_id)
         pose = localization_state.get('pose')
         if pose:
-            trajectory = self.trajectory_maker.calculate_path(localization_state)
+            trajectory = self.trajectory_maker.calculate_path(self, session_id, localization_state)
             # action_list = actions(pose, path_list, float(self.navigation_states[session_id]['scale']))
-            return trajectory
+            
+            if len(trajectory) > 0:
+                return trajectory
+            else:
+                return {}, None
         else:
-            return [], [], None
+            return {}, None

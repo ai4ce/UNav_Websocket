@@ -33,7 +33,7 @@ def setup_socketio_handlers(socketio, server, client_frames):
         for session_id, session_info in client_sessions.items():
             if session_info['flask_sid'] == flask_sid:
                 custom_session_id = session_id
-                server.terminate(custom_session_id)
+                # server.terminate(custom_session_id)
 
         if custom_session_id:
             del client_sessions[custom_session_id]

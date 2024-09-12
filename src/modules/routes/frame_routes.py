@@ -41,13 +41,13 @@ def register_frame_routes(app, server, socketio):
 
                 # Perform localization if requested
                 if do_localize:
-                    pose = server.handle_localization(session_id, frame)
-                    response_data['pose'] = pose
+                    pose_update_info = server.handle_localization(session_id, frame)
+                    response_data['pose'] = pose_update_info.get('pose')
 
                 buffered = io.BytesIO()
                 frame.save(buffered, format="JPEG")
                 new_frame_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-                response_data['frame'] = new_frame_base64
+                response_data['floorplan_base64'] = pose_update_info.get('floorplan_base64')
                 socketio.emit('camera_frame', {'session_id': session_id, 'frame': new_frame_base64})
                 return jsonify(response_data), 200
             else:

@@ -30,7 +30,7 @@ class Local_matcher():
         return np.array(pts0), np.array(pts1), np.array(lms)
 
 
-    def lightglue_batch(self, topk, feats0):
+    def lightglue_batch(self, parent, topk, feats0):
         batch_size = len(topk)
         mini_batch_size = 15
         batch_list = [min(mini_batch_size, batch_size - i) for i in range(0, batch_size, mini_batch_size)]
@@ -46,7 +46,9 @@ class Local_matcher():
         feats0_image_size = torch.tensor(feats0['image_size']).unsqueeze(0).to(self.device)
         feats0_keypoints = torch.tensor(feats0['keypoints']).unsqueeze(0).to(self.device)
         feats0_scores = torch.tensor(feats0['scores']).unsqueeze(0).to(self.device)
-
+        
+        valid_db_frame_name = []
+        
         for batch in batch_list:
             valid_keypoints_index, landmarks_list = [],[]
             batch_topk = topk[index:index+batch]
@@ -94,6 +96,7 @@ class Local_matcher():
                 pred1 = self.local_feature_matcher(pred)
             matches = pred1['matches0'].detach().cpu().short().numpy()
 
+            
             # Process matches
             for ind, match in enumerate(matches):
 
@@ -111,6 +114,7 @@ class Local_matcher():
                 
                 inlier_num = len(pts0)
                 if inlier_num > self.threshold:
+                    valid_db_frame_name.append(parent.db_name[ind + index])
                     if max_matched_num < inlier_num:
                         max_matched_num = inlier_num
                     pts0_list.append(np.array(pts0))
@@ -119,7 +123,7 @@ class Local_matcher():
 
             index += batch
 
-        return pts0_list, pts1_list, lms_list, max_matched_num
+        return valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num
 
 
     def lightglue(self, i, feats0):

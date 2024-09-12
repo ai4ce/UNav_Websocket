@@ -233,6 +233,7 @@ class DataHandler:
 
                     # Add the frame data into the map data dictionary
                     map_data['perspective_frames'][f'{building}_{floor}_{frame_name}'] = {
+                        'segment_id': segment_id,
                         'global_descriptor': global_descriptor,
                         'local_features': {
                             'keypoints': keypoints,

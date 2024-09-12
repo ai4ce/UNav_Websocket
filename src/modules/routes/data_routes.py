@@ -71,22 +71,22 @@ def register_data_routes(app, server, socketio):
         floors = [d for d in os.listdir(building_path) if os.path.isdir(os.path.join(building_path, d))]
         return jsonify({'floors': floors})
 
-    @app.route('/get_scale', methods=['POST'])
-    def get_scale():
-        """
-        Retrieve the scale for a specified place, building, and floor.
-        """
-        data = request.json
-        place = data.get('place')
-        building = data.get('building')
-        floor = data.get('floor')
-        session_id = data.get('session_id')
+    # @app.route('/get_scale', methods=['POST'])
+    # def get_scale():
+    #     """
+    #     Retrieve the scale for a specified place, building, and floor.
+    #     """
+    #     data = request.json
+    #     place = data.get('place')
+    #     building = data.get('building')
+    #     floor = data.get('floor')
+    #     session_id = data.get('session_id')
 
-        scale = server.get_scale(place, building, floor, session_id)
-        return jsonify({'scale': scale})
+    #     scale = server.get_scale(place, building, floor, session_id)
+    #     return jsonify({'scale': scale})
 
-    @app.route('/get_floorplan_and_destinations', methods=['POST'])
-    def get_floorplan_and_destinations():
+    @app.route('/get_destinations', methods=['POST'])
+    def get_destinations_list():
         """
         Retrieve the floorplan and available destinations for the current location.
         """
@@ -95,10 +95,9 @@ def register_data_routes(app, server, socketio):
         place = data.get('place')
         building = data.get('building')
         floor = data.get('floor')
-        session_id = data.get('session_id')
         
-        floorplan_data = server.get_floorplan_and_destinations(session_id, place, building, floor)
-        return jsonify(floorplan_data)
+        destination_data = server.get_destinations_list(building, floor)
+        return jsonify(destination_data)
 
     @app.route('/select_destination', methods=['POST'])
     def select_destination():
@@ -128,12 +127,9 @@ def register_data_routes(app, server, socketio):
         data = request.json
         session_id = data.get('session_id')
         
-        paths, action_list = server.handle_navigation(session_id)
-        rounded_paths = [
-            [int(point[0]), int(point[1])] if len(point) == 2 else [int(point[0]), int(point[1]), point[2]]
-            for point in paths
-        ]
-        socketio.emit('planner_update', {'paths': rounded_paths})
-        return jsonify({'paths': rounded_paths, 'actions': action_list})
+        trajectory = server.handle_navigation(session_id)
+
+        socketio.emit('planner_update', {'trajectory': trajectory})
+        return jsonify({'trajectory': trajectory})
         # except ValueError as e:
         #     return jsonify({'error': str(e)}), 400
