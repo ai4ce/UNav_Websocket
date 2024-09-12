@@ -8,34 +8,42 @@ from modal_config import app,unav_image
 @app.cls(image=unav_image)
 class UnavServer:
     
-    @method
-    def localize():
-        return
+    @method()
+    def localize(self):
+        return "Image localized"
 
-    @method
+    @method()
     def get_options():
         pass
 
-    @method
+    @method()
     def list_places():
         pass
 
-    @method
+    @method()
     def list_buildings():
        pass
 
-    @method
+    @method()
     def list_floors():
         pass
 
-    @method
+    @method()
     def get_destinations_list():
         pass
 
-    @method
+    @method()
     def select_destination():
        pass
 
-    @method
+    @method()
     def planner():
        pass
+   
+
+
+
+@app.local_entrypoint()
+def main():
+    unav_server = UnavServer()
+    print(unav_server.localize.remote())

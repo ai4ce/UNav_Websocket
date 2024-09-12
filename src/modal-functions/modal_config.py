@@ -9,7 +9,7 @@ unav_image = (
         "apt-get install -y pkg-config libhdf5-dev gcc libgl1-mesa-glx libglib2.0-0",
         "pip install --upgrade pip",
     )
-        .run_commands(
+    .run_commands(
          "apt-get update",
         "apt-get install -y build-essential python3 python3-pip git cmake libeigen3-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev libsuitesparse-dev pkg-config libhdf5-dev gcc libgl1-mesa-glx libglib2.0-0",
         "apt-get remove -y libeigen3-dev",  # Remove the existing version of Eigen3
@@ -49,8 +49,4 @@ unav_image = (
     )
     .workdir('/root')
     .run_commands("ls")
-    .pip_install_from_requirements("requirements.txt")
-    .pip_install("kornia")
-    .pip_install("unav==0.1.40")
-    .pip_install("pytorch_lightning")
-    .pip_install("gdown"))
+)
