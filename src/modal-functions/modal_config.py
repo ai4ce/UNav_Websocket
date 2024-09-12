@@ -7,7 +7,6 @@ unav_image = (
     .run_commands(
         "apt-get update",
         "apt-get install -y cmake git libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
-        "pip install --upgrade pip",
     )
    .run_commands(
        "git clone https://gitlab.com/libeigen/eigen.git eigen"
