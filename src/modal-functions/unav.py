@@ -1,6 +1,6 @@
 
 
-from modal import method
+from modal import method,enter
 
 from modal_config import app,unav_image
 
@@ -8,36 +8,26 @@ from modal_config import app,unav_image
 @app.cls(image=unav_image)
 class UnavServer:
     
+    
+    def settings(self):
+        pass
+    
+    @method()
+    def get_floor_plan_and_destination(self):
+        pass
+    
+    @method()
+    def select_destination(self):
+       pass
+    
     @method()
     def localize(self):
         return "Image localized"
 
-    @method()
-    def get_options():
-        pass
+
 
     @method()
-    def list_places():
-        pass
-
-    @method()
-    def list_buildings():
-       pass
-
-    @method()
-    def list_floors():
-        pass
-
-    @method()
-    def get_destinations_list():
-        pass
-
-    @method()
-    def select_destination():
-       pass
-
-    @method()
-    def planner():
+    def get_navigation_instructions(self):
        pass
    
 
