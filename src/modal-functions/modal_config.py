@@ -34,6 +34,6 @@ unav_image = (
         "pip install .",
         "pip freeze",
     )
+    .pip_install_from_requirements("requirements.txt")
     .workdir('/root')
-
 )
