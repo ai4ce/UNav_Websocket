@@ -17,3 +17,8 @@ scikit-learn==1.3.2
 pytorch-lightning==2.2.5
 pytorch-metric-learning==2.6.0
 poselib
+Flask==2.2.5
+Flask-Mail==0.9.1
+Flask-SocketIO==5.1.1
+Flask-SQLAlchemy==2.5.1
+SQLAlchemy==1.4.47

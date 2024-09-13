@@ -8,7 +8,7 @@ current_dir = Path(__file__).resolve().parent
 # Construct the path to the src directory
 local_dir = current_dir / ".."
 
-app = App(name="unav-server",mounts=[Mount.from_local_dir(local_dir.resolve(), remote_path="/root")])
+app = App(name="unav-server",mounts=[Mount.from_local_dir(local_dir.resolve(), remote_path="/root"),Mount.from_local_file("modal_functions/config.yaml",remote_path="/root/config.yaml")])
 
 unav_image = (
     Image.debian_slim(python_version="3.8")

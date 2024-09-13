@@ -28,8 +28,13 @@ class UnavServer:
         from PIL import Image
         import numpy as np
         from server_manager import Server
+        from modules.config.settings import load_config
         
-        server = Server(logger=None,config=None)
+        config = load_config('config.yaml')
+        
+        
+        
+        server = Server(logger=None,config=config)
         
         """
             Handle localization request by processing the provided image and returning the pose.
