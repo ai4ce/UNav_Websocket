@@ -29,7 +29,7 @@ class UnavServer:
         import numpy as np
         from server_manager import Server
         
-        # server = Server()
+        server = Server(logger=None,config=None)
         
         """
             Handle localization request by processing the provided image and returning the pose.
