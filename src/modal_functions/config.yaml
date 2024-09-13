@@ -8,7 +8,7 @@ location:
   floor: "6_floor"
   scale: 0.01098358101
 
-IO_root: "/data/UNav-IO"
+IO_root: "/root/UNav-IO"
 
 devices: "cuda:0"
 
