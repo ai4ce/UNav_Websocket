@@ -1,12 +1,20 @@
 from modal import App, Image,Mount
+from pathlib import Path
+import os
 
-app = App(name="unav-server",mounts=[Mount.from_local_dir("/user/john/.aws", remote_path="")])
+# Get the current file's directory
+current_dir = Path(__file__).resolve().parent
+
+# Construct the path to the src directory
+local_dir = current_dir / ".."
+
+app = App(name="unav-server",mounts=[Mount.from_local_dir(local_dir.resolve(), remote_path="/root")])
 
 unav_image = (
     Image.debian_slim(python_version="3.8")
     .run_commands(
         "apt-get update",
-        "apt-get install -y cmake git libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
+        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
     )
    .run_commands(
        "git clone https://gitlab.com/libeigen/eigen.git eigen"
@@ -34,7 +42,7 @@ unav_image = (
         "pip install .",
         "pip freeze",
     )
-    .pip_install_from_requirements("modal_requirements.txt")
+    .pip_install_from_requirements("modal_functions/modal_requirements.txt")
     .workdir('/root') 
 )
 
