@@ -1,25 +1,13 @@
 import base64
 import os
-from PIL import Image
 
-from modal import method, Mount
+from modal import method, gpu
 
-from modal_config import app, unav_image
+from modal_config import app, unav_image, volume
 
 
-@app.cls(image=unav_image)
+@app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any())
 class UnavServer:
-
-    # def settings(self):
-    #     pass
-
-    # @method()
-    # def get_floor_plan_and_destination(self):
-    #     pass
-
-    # @method()
-    # def select_destination(self):
-    #    pass
 
     @method()
     def localize(self, query_image_base64):
@@ -49,9 +37,6 @@ class UnavServer:
 
         return "Image localized"
 
-    # @method()
-    # def get_navigation_instructions(self):
-    #    pass
 
 
 @app.local_entrypoint()

@@ -1,13 +1,23 @@
-from modal import App, Image, Mount, NetworkFileSystem
+from modal import App, Image, Mount, NetworkFileSystem, Volume
 from pathlib import Path
 
-volume = NetworkFileSystem.from_name("my-volume", create_if_missing=True)
+volume = Volume.from_name("Visiondata")
+
+MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
+MODEL_PATH = ".cache/torch/hub/checkpoints/"
 
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
 # Construct the path to the src directory
 local_dir = current_dir / ".."
+
+
+def download_torch_hub_weights():
+    import torch
+    model_weights = torch.hub.load_state_dict_from_url(MODEL_URL, progress=True)
+    torch.save(model_weights, "vgg16_weights.pth")
+
 
 app = App(
     name="unav-server",
@@ -51,4 +61,5 @@ unav_image = (
     )
     .pip_install_from_requirements("modal_functions/modal_requirements.txt")
     .workdir("/root")
+    .run_function(download_torch_hub_weights)
 )
