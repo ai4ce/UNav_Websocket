@@ -4,7 +4,6 @@ from pathlib import Path
 volume = Volume.from_name("Visiondata")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
-MODEL_PATH = ".cache/torch/hub/checkpoints/"
 
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
