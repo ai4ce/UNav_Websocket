@@ -38,6 +38,10 @@ class UnavServer:
         return "Image localized"
 
 
+    @method()
+    def planner(self):
+        pass
+
 
 @app.local_entrypoint()
 def main():
