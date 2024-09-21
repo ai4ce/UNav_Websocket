@@ -10,13 +10,9 @@ import boto3
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-image = modal.Image.debian_slim().run_commands(
-    "pip install gdown",
-    "pip install PyYAML",
-    "pip install boto3",
-    'pip install python-dotenv'
 
-                                               )
+# Reference the requirements-modal.txt for installing dependencies
+image = modal.Image.debian_slim().pip_install_from_requirements("modal_functions/volumesetup_requirements.txt")
 
 volume = modal.Volume.from_name("Visiondata", create_if_missing=True)
 
@@ -86,13 +82,18 @@ def checkAndDownload_file_from_remoteStorage():   ## download the data to the re
         s3_key = obj['Key']
         file_path = os.path.join(modal_directory, s3_key)
 
-        # Create directories for nested keys if necessary
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        # Check if the file already exists in the modal volume
+        if not os.path.exists(file_path):
+            # Create directories for nested keys if necessary
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-        logging.info(f"Downloading {s3_key} to {file_path}")
-        
-        # Download the file
-        s3_client.download_file(bucket_name, s3_key, file_path)
+            # Log the downloading process
+            logging.info(f"Downloading {s3_key} to {file_path}")
+
+            # Download the file from S3 to the modal volume
+            s3_client.download_file(bucket_name, s3_key, file_path)
+        else:
+            logging.info(f"{file_path} already exists, skipping download.")
     
     logging.info(f"All files from S3 bucket {bucket_name} have been downloaded to {modal_directory}")
 

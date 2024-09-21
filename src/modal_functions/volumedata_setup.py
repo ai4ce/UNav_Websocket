@@ -23,7 +23,7 @@ class DataManager:
         )
 
         self.bucket_name = s3_bucket_name
-        self.files = {
+        self.remotefilesIds = {
             "demo_query.png": "17MzPE9TyKiNsi6G59rqLCMMd40cIK3bU",
             "destination.json": "1sIzFujoumSsVlZqlwwO20l96ZziORP-w",
             "hloc.yaml": "15JYLqU9Y56keMrg9ZfxwfbkbL6_haYpx",
@@ -40,7 +40,7 @@ class DataManager:
 
     def download_files_from_google_drive(self, base_path="/files"):
         """Download files from Google Drive."""
-        for filename, file_id in self.files.items():
+        for filename, file_id in self.remotefilesIds.items():
             logging.info(f"Processing {filename}")
             download_path = self.get_download_path(filename, base_path)
 
