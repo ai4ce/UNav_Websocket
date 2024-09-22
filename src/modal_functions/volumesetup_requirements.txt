@@ -1,0 +1,4 @@
+gdown
+PyYAML
+boto3
+python-dotenv
