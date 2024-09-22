@@ -1,10 +1,8 @@
 import base64
 import os
-
 from modal import method, gpu
-
 from modal_config import app, unav_image, volume
-
+import torch
 
 @app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any())
 class UnavServer:
@@ -26,8 +24,12 @@ class UnavServer:
         """
             Handle localization request by processing the provided image and returning the pose.
         """
+        # Use GPU if available, otherwise fallback to CPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
+        # Move the model to the same device
+        server.coarse_locator.coarse_vpr.global_extractor.model.to(self.device)
+
         query_image_data = (
             base64.b64decode(query_image_base64.split(",")[1])
             if "," in query_image_base64
@@ -37,13 +39,12 @@ class UnavServer:
         query_image_tensor = torch.from_numpy(np.array(query_image)).float().to(self.device)
 
         # Convert tensor back to PIL Image before passing to input_transform
-        query_image_pil = Image.fromarray(query_image_tensor.gpu().numpy().astype(np.uint8))
+        query_image_pil = Image.fromarray(query_image_tensor.cpu().numpy().astype(np.uint8))
 
-        pose = server.handle_localization(frame=query_image_pil,session_id="test")
+        pose = server.handle_localization(frame=query_image_pil, session_id="test")
         pounded_pose = [int(coord) for coord in pose] if pose else None
         print(pounded_pose)
         return "Image localized"
-
 
     @method()
     def planner(self):
