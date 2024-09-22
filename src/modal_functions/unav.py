@@ -17,6 +17,7 @@ class UnavServer:
         import numpy as np
         from server_manager import Server
         from modules.config.settings import load_config
+        import torch
 
         config = load_config("config.yaml")
 
@@ -25,16 +26,22 @@ class UnavServer:
         """
             Handle localization request by processing the provided image and returning the pose.
         """
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         query_image_data = (
             base64.b64decode(query_image_base64.split(",")[1])
             if "," in query_image_base64
             else base64.b64decode(query_image_base64)
         )
         query_image = Image.open(io.BytesIO(query_image_data)).convert("RGB")
+        query_image_tensor = torch.from_numpy(np.array(query_image)).float().to(self.device)
 
-        # pose = server.handle_localization(np.array(query_image))
-        # rounded_pose = [int(coord) for coord in pose] if pose else None
+        # Convert tensor back to PIL Image before passing to input_transform
+        query_image_pil = Image.fromarray(query_image_tensor.gpu().numpy().astype(np.uint8))
 
+        pose = server.handle_localization(frame=query_image_pil,session_id="test")
+        pounded_pose = [int(coord) for coord in pose] if pose else None
+        print(pounded_pose)
         return "Image localized"
 
 
