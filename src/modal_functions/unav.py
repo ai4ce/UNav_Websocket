@@ -8,6 +8,37 @@ from modal_config import app, unav_image, volume
 class UnavServer:
 
     @method()
+    def get_destinations_list(self):
+        from server_manager import Server
+        from modules.config.settings import load_config
+
+        config = load_config("config.yaml")
+
+        server = Server(logger=None, config=config)
+
+        response = server.get_destinations_list(building="LightHouse", floor="6_floor")
+        return response
+
+    @method()
+    def select_destination(self):
+        from server_manager import Server
+        from modules.config.settings import load_config
+
+        config = load_config("config.yaml")
+
+        server = Server(logger=None, config=config)
+
+        server.select_destination(
+            session_id="test_session_id",
+            place="New_York_City",
+            building="LightHouse",
+            floor="6_floor",
+            destination_id="192",
+        )
+
+        pass
+
+    @method()
     def localize(
         self, query_image_base64: str, session_id: str = "test_session_id"
     ) -> Dict[str, Optional[str]]:

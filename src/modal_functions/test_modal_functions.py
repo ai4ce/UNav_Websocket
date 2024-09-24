@@ -6,17 +6,18 @@ import modal
 
 def main():
 
-    UnavServer = modal.Cls.lookup(
-        "unav-server", "UnavServer"
-    ) 
+    UnavServer = modal.Cls.lookup("unav-server", "UnavServer")
     unav_server = UnavServer()
     current_directory = os.getcwd()
-    full_image_path = os.path.join(current_directory, "modal_functions/misc/sample2.png")
+    full_image_path = os.path.join(
+        current_directory, "modal_functions/misc/sample2.png"
+    )
 
-    with open(full_image_path, "rb") as image_file:
-        image_data = image_file.read()
-        base64_encoded = base64.b64encode(image_data).decode("utf-8")
-    print(unav_server.localize.remote(base64_encoded))
+    # with open(full_image_path, "rb") as image_file:
+    #     image_data = image_file.read()
+    #     base64_encoded = base64.b64encode(image_data).decode("utf-8")
+    # print(unav_server.localize.remote(base64_encoded))
+    print(unav_server.get_destinations_list.remote())
 
 
 if __name__ == "__main__":
