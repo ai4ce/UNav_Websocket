@@ -82,5 +82,15 @@ class UnavServer:
         return pose
 
     @method()
-    def planner(self):
-        pass
+    def planner(self, session_id: str = "test_session_id"):
+        import json
+        from server_manager import Server
+        from modules.config.settings import load_config
+        from logger_utils import setup_logger
+        
+        config = load_config("config.yaml")
+
+        server = Server(logger=setup_logger(), config=config)
+
+        trajectory = server.handle_navigation(session_id)
+        return json.dumps({"trajectory": trajectory})
