@@ -2,6 +2,7 @@ from modal import method, gpu
 from typing import Optional, Dict
 
 from modal_config import app, unav_image, volume
+from logger_utils import setup_logger
 
 
 @app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any())
@@ -29,25 +30,11 @@ class UnavServer:
     ):
         from server_manager import Server
         from modules.config.settings import load_config
-        import logging
-
-        logger = logging.getLogger("server_logger")
-
-        logger.setLevel(logging.DEBUG)
-
-        handler = logging.StreamHandler()
-
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        handler.setFormatter(formatter)
-
-        logger.addHandler(handler)
 
         config = load_config("config.yaml")
 
-        server = Server(logger=logger, config=config)
-        print("Server Initialized")
+        server = Server(logger=setup_logger(), config=config)
+
         response = server.select_destination(
             session_id=session_id,
             place=place,
@@ -55,8 +42,10 @@ class UnavServer:
             floor=floor,
             destination_id=destination_id,
         )
-
-        return response
+        if response == None:
+            return "Desintation Set to id: " + destination_id
+        else:
+            return response
 
     @method()
     def localize(
@@ -70,7 +59,7 @@ class UnavServer:
 
         config = load_config("config.yaml")
 
-        server = Server(logger=None, config=config)
+        server = Server(logger=setup_logger(), config=config)
 
         """
             Handle localization request by processing the provided image and returning the pose.
