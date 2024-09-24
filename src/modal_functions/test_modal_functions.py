@@ -11,7 +11,7 @@ def main():
     ) 
     unav_server = UnavServer()
     current_directory = os.getcwd()
-    full_image_path = os.path.join(current_directory, "modal_functions/misc/sample.png")
+    full_image_path = os.path.join(current_directory, "modal_functions/misc/sample2.png")
 
     with open(full_image_path, "rb") as image_file:
         image_data = image_file.read()

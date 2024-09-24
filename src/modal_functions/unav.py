@@ -1,4 +1,6 @@
 from modal import method, gpu
+from typing import Optional, Dict
+
 from modal_config import app, unav_image, volume
 
 
@@ -6,7 +8,9 @@ from modal_config import app, unav_image, volume
 class UnavServer:
 
     @method()
-    def localize(self, query_image_base64):
+    def localize(
+        self, query_image_base64: str, session_id: str = "test_session_id"
+    ) -> Dict[str, Optional[str]]:
         import base64
         import io
         from PIL import Image
@@ -28,7 +32,7 @@ class UnavServer:
         )
         query_image = Image.open(io.BytesIO(query_image_data)).convert("RGB")
 
-        pose = server.handle_localization(frame=query_image, session_id="test")
+        pose = server.handle_localization(frame=query_image, session_id=session_id)
         print("Pose: ", pose)
         if pose["pose"] is not None:
             pounded_pose = [int(coord) for coord in pose] if pose else None
