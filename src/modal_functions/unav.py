@@ -6,7 +6,6 @@ from modal_config import app, unav_image, volume
 
 @app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any())
 class UnavServer:
-
     @method()
     def get_destinations_list(self):
         from server_manager import Server
@@ -20,7 +19,14 @@ class UnavServer:
         return response
 
     @method()
-    def select_user_destination(self, destination_id: str = "07993"):
+    def select_user_destination(
+        self,
+        destination_id: str = "07993",
+        session_id: str = "test_session_id",
+        building: str = "LightHouse",
+        floor: str = "6_floor",
+        place: str = "New_York_City",
+    ):
         from server_manager import Server
         from modules.config.settings import load_config
         import logging
@@ -43,10 +49,10 @@ class UnavServer:
         server = Server(logger=logger, config=config)
         print("Server Initialized")
         response = server.select_destination(
-            session_id="test_session_id",
-            place="New_York_City",
-            building="LightHouse",
-            floor="6_floor",
+            session_id=session_id,
+            place=place,
+            building=building,
+            floor=floor,
             destination_id=destination_id,
         )
 
