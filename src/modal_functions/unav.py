@@ -20,23 +20,37 @@ class UnavServer:
         return response
 
     @method()
-    def select_destination(self):
+    def select_user_destination(self, destination_id: str = "07993"):
         from server_manager import Server
         from modules.config.settings import load_config
+        import logging
+
+        logger = logging.getLogger("server_logger")
+
+        logger.setLevel(logging.DEBUG)
+
+        handler = logging.StreamHandler()
+
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+
+        logger.addHandler(handler)
 
         config = load_config("config.yaml")
 
-        server = Server(logger=None, config=config)
-
-        server.select_destination(
+        server = Server(logger=logger, config=config)
+        print("Server Initialized")
+        response = server.select_destination(
             session_id="test_session_id",
             place="New_York_City",
             building="LightHouse",
             floor="6_floor",
-            destination_id="192",
+            destination_id=destination_id,
         )
 
-        pass
+        return response
 
     @method()
     def localize(
