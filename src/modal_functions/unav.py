@@ -72,7 +72,22 @@ class UnavServer:
         )
         query_image = Image.open(io.BytesIO(query_image_data)).convert("RGB")
 
+        print("Query Image Converted from base64 to PIL Image")
+
+        response = server.select_destination(
+            session_id=session_id,
+            place="New_York_City",
+            building="LightHouse",
+            floor="6_floor",
+            destination_id="07993",
+        )
+        if response == None:
+            print("Desintation Set to id: " + "07993")
+        else:
+            print(response)
+
         pose = server.handle_localization(frame=query_image, session_id=session_id)
+
         print("Pose: ", pose)
         if pose["pose"] is not None:
             pounded_pose = [int(coord) for coord in pose] if pose else None
@@ -82,15 +97,29 @@ class UnavServer:
         return pose
 
     @method()
-    def planner(self, session_id: str = "test_session_id"):
+    def planner(
+        self,
+        session_id: str = "test_session_id",
+        destination_id: str = "07993",
+        building: str = "LightHouse",
+        floor: str = "6_floor",
+        place: str = "New_York_City",
+        base_64_image: str = None,
+    ):
+        
         import json
         from server_manager import Server
         from modules.config.settings import load_config
         from logger_utils import setup_logger
+
+
+        if True:
+            return json.dumps({"trajectory": [1, 2, 3, 4, 5]})
         
         config = load_config("config.yaml")
 
         server = Server(logger=setup_logger(), config=config)
 
         trajectory = server.handle_navigation(session_id)
+
         return json.dumps({"trajectory": trajectory})
