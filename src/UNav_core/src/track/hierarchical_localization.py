@@ -56,25 +56,33 @@ class Coarse_Locator:
         return torch.tensor(descriptors, dtype=torch.float32).to(self.device), segment_ids
 
     def coarse_vpr(self, image):
-        """
-        Perform coarse visual place recognition.
-        :param image: The query image for which to find the place.
-        :return: Top-k matches and a boolean indicating if the corresponding segment is found.
-        """
-        # Extract global descriptor from the query image
-        query_desc = self.global_extractor(image).to(self.device)
-
-        # Compute similarity between the query descriptor and database descriptors
-        sim = torch.einsum('id,jd->ij', query_desc, self.global_descriptors)
-        topk_indices = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
-
-        # Retrieve the corresponding segment IDs for the top-k matches
-        topk_segments = self.segment_ids[topk_indices[0]]
-        
-        # Analyze top-k results
-        segment, success = self.analyze_topk_results(topk_segments)
-        
-        return topk_segments, segment, success
+            """
+            Perform coarse visual place recognition.
+            :param image: The query image for which to find the place.
+            :return: Top-k matches and a boolean indicating if the corresponding segment is found.
+            """
+            print("Starting coarse_vpr function")
+            
+            # Extract global descriptor from the query image
+            query_desc = self.global_extractor(image).to(self.device)
+            print(f"Extracted query descriptor: {query_desc.shape}")
+    
+            # Compute similarity between the query descriptor and database descriptors
+            sim = torch.einsum('id,jd->ij', query_desc, self.global_descriptors)
+            print(f"Computed similarity matrix: {sim.shape}")
+            
+            topk_indices = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
+            print(f"Top-k indices: {topk_indices}")
+    
+            # Retrieve the corresponding segment IDs for the top-k matches
+            topk_segments = self.segment_ids[topk_indices[0]]
+            print(f"Top-k segments: {topk_segments}")
+            
+            # Analyze top-k results
+            segment, success = self.analyze_topk_results(topk_segments)
+            print(f"Analyzed top-k results: segment={segment}, success={success}")
+            
+            return topk_segments, segment, success
     
     def get_topk_segments(self, topk_indices):
         """
@@ -93,6 +101,9 @@ class Coarse_Locator:
         :param topk_segments: List of segment IDs corresponding to the top-k matches.
         :return: The most likely segment and a boolean indicating if localization succeeded.
         """
+        print("Starting analyze_topk_results function")
+        print(f"Top-k segments: {topk_segments}")
+    
         segment_counts = {}
         
         # First, count occurrences of each segment in topk_segments
@@ -102,9 +113,11 @@ class Coarse_Locator:
             else:
                 segment_counts[segment] = 1
         
+        print(f"Segment counts: {segment_counts}")
+        
         # Initialize a dictionary to accumulate counts for segments and their neighbors
         segment_wt_neighbor_counts = {}
-
+    
         # Accumulate counts including neighbor segments
         for segment, count in segment_counts.items():
             # Start with the count of the segment itself
@@ -119,12 +132,18 @@ class Coarse_Locator:
             # Record the accumulated count for the segment
             segment_wt_neighbor_counts[segment] = total_count
         
+        print(f"Segment with neighbor counts: {segment_wt_neighbor_counts}")
+        
         # Determine the segment with the highest total count
         most_likely_segment = max(segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get)
-        success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.3
+        success_ratio = segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)
+        success = success_ratio >= 0.3
+        
+        print(f"Most likely segment: {most_likely_segment}")
+        print(f"Success ratio: {success_ratio}")
+        print(f"Success: {success}")
         
         return most_likely_segment, success
-
     
     def get_segment_id(self, index):
         """

@@ -149,130 +149,129 @@ class Server(DataHandler):
         pass
     
     def handle_localization(self, session_id, frame):
-        """
-        Handles the localization process for a given session and frame.
-        Returns the pose and segment_id if localization is successful.
-        """
-        state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
-        
-        pose_update_info = {
-            'pose': None,
-            'floorplan_base64': None
-        }
-        
-        time_since_last_success = time.time() - state['last_success_time']
-        previous_segment_id = state['segment_id']
-
-        if state['failures'] >= COARSE_LOCALIZE_THRESHOLD or time_since_last_success > TIMEOUT_SECONDS or not state['segment_id']:
-            segment_id = self.coarse_localize(frame) #debug
-            if segment_id:
+            """
+            Handles the localization process for a given session and frame.
+            Returns the pose and segment_id if localization is successful.
+            """
+            print(f"Handling localization for session_id: {session_id}")
+            
+            state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
+            print(f"Initial state: {state}")
+            
+            pose_update_info = {
+                'pose': None,
+                'floorplan_base64': None
+            }
+            
+            time_since_last_success = time.time() - state['last_success_time']
+            previous_segment_id = state['segment_id']
+            print(f"Time since last success: {time_since_last_success}, Previous segment ID: {previous_segment_id}")
+    
+            if state['failures'] >= COARSE_LOCALIZE_THRESHOLD or time_since_last_success > TIMEOUT_SECONDS or not state['segment_id']:
+                print("Performing coarse localization")
+                segment_id = self.coarse_localize(frame) #debug
+                print(f"Coarse localization result: {segment_id}")
                 
-                building, floor = self._split_id(segment_id)
-
-                connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
-                current_neighbors = list(connection_data.get(segment_id, set()))
-                
-                current_cluster = [segment_id] + current_neighbors
-                
-                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
-                
-                self.refine_locator.update_maps(map_data)
-                
-                pose, next_segment_id = self.refine_locator.get_location(frame) #debug
-                
-
-                if pose:
-                    pose_update_info['pose'] = pose
+                if segment_id:
+                    building, floor = self._split_id(segment_id)
+                    print(f"Building: {building}, Floor: {floor}")
+    
+                    connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
+                    current_neighbors = list(connection_data.get(segment_id, set()))
+                    current_cluster = [segment_id] + current_neighbors
+                    print(f"Current cluster: {current_cluster}")
                     
-                    state['pose'] = pose
-                    state['segment_id'] = segment_id
-                    state['failures'] = 0
-                    state['last_success_time'] = time.time()
+                    map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                    print(f"Loaded map data for current cluster")
+    
+                    self.refine_locator.update_maps(map_data)
+                    print("Updated refine locator maps")
                     
-                    # if building != state['building'] or floor != state['floor']:
-                    pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+                    pose, next_segment_id = self.refine_locator.get_location(frame) #debug
+                    print(f"Refine localization result - Pose: {pose}, Next segment ID: {next_segment_id}")
+    
+                    if pose:
+                        pose_update_info['pose'] = pose
+                        state['pose'] = pose
+                        state['segment_id'] = segment_id
+                        state['failures'] = 0
+                        state['last_success_time'] = time.time()
+                        pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+                        state['floor'] = floor
+                        state['building'] = building
+                        print(f"Updated state with new pose and segment ID: {state}")
                         
-                    state['floor'] = floor
-                    state['building'] = building
-                    
-                    if state['segment_id']:
-                        # judge if need switch segments
-                        if next_segment_id != state['segment_id']:
-                            
+                        if state['segment_id'] and next_segment_id != state['segment_id']:
                             next_building, next_floor = self._split_id(next_segment_id)
                             state['segment_id'] = next_segment_id
-                            
-                            # if next_building != state['building'] or next_floor != state['floor']:
                             pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
-                                
-                            
-                            # delete old segments in cache
                             next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
                             segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
                             self.cache_manager.release_segments(session_id, segments_to_release)
-                            
-                                
                             state['building'] = next_building
                             state['floor'] = next_floor
+                            print(f"Switched to next segment ID: {next_segment_id}, Updated state: {state}")
+                    else:
+                        state['pose'] = None
+                        state['segment_id'] = None
+                        state['floor'] = None
+                        state['building'] = None
+                        state['failures'] += 1
+                        print(f"Failed to refine localization, updated state: {state}")
                         
+                    if previous_segment_id and previous_segment_id != segment_id:
+                        previous_neighbors = list(self.coarse_locator.connection_graph.get(previous_segment_id, {}).get('adjacent_segment'), set())
+                        segments_to_release = list(set([previous_segment_id] + previous_neighbors) - set(current_cluster))
+                        self.cache_manager.release_segments(session_id, segments_to_release)
+                        print(f"Released previous segment and neighbors: {previous_segment_id}")
+                else:
+                    state['failures'] += 1
+                    print(f"Coarse localization failed, incremented failures: {state['failures']}")
+    
+            else:      
+                print("Using cached segments for localization")
+                connection_data = self.coarse_locator.connection_graph.get(state['segment_id'], {})
+                current_neighbors = list(connection_data.get('adjacent_segment', set()))
+                current_cluster = [state['segment_id']] + current_neighbors
+                print(f"Current cluster from cache: {current_cluster}")
+                
+                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                print(f"Loaded map data for current cluster from cache")
+    
+                self.refine_locator.update_maps(map_data)
+                print("Updated refine locator maps from cache")
+                
+                pose, next_segment_id = self.refine_locator.get_location(frame) #debug
+                print(f"Refine localization result from cache - Pose: {pose}, Next segment ID: {next_segment_id}")
+    
+                if pose:
+                    next_building, next_floor = self._split_id(next_segment_id)
+                    state['building'] = next_building
+                    state['floor'] = next_floor
+                    if next_segment_id != state['segment_id']:
+                        state['segment_id'] = next_segment_id
+                        pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                        next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                        segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                        self.cache_manager.release_segments(session_id, segments_to_release)
+                        print(f"Switched to next segment ID: {next_segment_id}, Updated state: {state}")
+    
+                    pose_update_info['pose'] = pose
+                    pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                    state['pose'] = pose
+                    state['failures'] = 0
+                    state['last_success_time'] = time.time()
+                    print(f"Updated state with new pose from cache: {state}")
                 else:
                     state['pose'] = None
-                    state['segment_id'] = None
                     state['floor'] = None
                     state['building'] = None
                     state['failures'] += 1
-                    
-                # Release previous segment and its neighbors if they are no longer in use
-                if previous_segment_id and previous_segment_id != segment_id:
-                    previous_neighbors = list(self.coarse_locator.connection_graph.get(previous_segment_id, {}).get('adjacent_segment'), set())
-                    segments_to_release = list(set([previous_segment_id] + previous_neighbors) - set(current_cluster))
-                    self.cache_manager.release_segments(session_id, segments_to_release)
-            else:
-                state['failures'] += 1
-
-        else:      
-            # Retrieve the current segment and its neighbors from the cache
-            connection_data = self.coarse_locator.connection_graph.get(state['segment_id'], {})
-            current_neighbors = list(connection_data.get('adjacent_segment', set()))
-            current_cluster = [state['segment_id']] + current_neighbors
-            
-            map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
-
-            self.refine_locator.update_maps(map_data)
-            
-            pose, next_segment_id = self.refine_locator.get_location(frame) #debug
-            
-            if pose:
-
-                # judge if need switch segments
-                next_building, next_floor = self._split_id(next_segment_id)
-                state['building'] = next_building
-                state['floor'] = next_floor
-                if next_segment_id != state['segment_id']:
-                    state['segment_id'] = next_segment_id
-                    # if next_building != state['building'] or next_floor != state['floor']:
-                    pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
-                        
-                    # delete old segments in cache
-                    next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
-                    segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
-                    self.cache_manager.release_segments(session_id, segments_to_release)
-
-                pose_update_info['pose'] = pose
-                
-                pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
-                state['pose'] = pose
-                state['failures'] = 0
-                state['last_success_time'] = time.time()
-            else:
-                state['pose'] = None
-                state['floor'] = None
-                state['building'] = None
-                state['failures'] += 1
-
-        self.localization_states[session_id] = state
-        return pose_update_info
+                    print(f"Failed to refine localization from cache, updated state: {state}")
     
+            self.localization_states[session_id] = state
+            print(f"Final state for session_id {session_id}: {state}")
+            return pose_update_info
     def handle_navigation(self, session_id):
         if session_id not in self.destination_states:
             self.logger.error("Selected destination ID is not set.")
