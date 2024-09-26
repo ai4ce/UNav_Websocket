@@ -43,13 +43,22 @@ class Server(DataHandler):
 
         ############################################# test data #################################################
         # Load and process the specific image for debugging
-        # image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_Good/2023-07-21_13-59-48.png'
+        # image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_floor/08128/images/2023-11-20_14-44-01.png'
         # image = Image.open(image_path)
         
-        # self.image_np = np.array(image)
+        # original_width, original_height = image.size
+
+        # new_width = 640
+        # new_height = int((new_width / original_width) * original_height)
+
+        # # Resize the image
+        # resized_image = image.resize((new_width, new_height))
+
+        # image_rgb = resized_image.convert("RGB")
+        
+        # self.image_np = np.array(image_rgb)
         ############################################# test data #################################################
         
-    
     def update_config(self, new_config):
         # Merge the new configuration with the existing one
         
@@ -104,7 +113,7 @@ class Server(DataHandler):
         return {
             'floorplan': floorplan_base64,
         }
-        
+
     def get_destinations_list(self, building, floor):
         # Load destination data
         destinations = self.all_buildings_data.get(building,{}).get(floor,{}).get('destinations',{})
@@ -137,24 +146,23 @@ class Server(DataHandler):
         ids = os.listdir(base_path)
         images = {id: os.listdir(os.path.join(base_path, id, 'images')) for id in ids if os.path.isdir(os.path.join(base_path, id, 'images'))}
         return images
-    
+
     def _split_id(self, segment_id):
         # Load the current segment and its neighbors
         parts = segment_id.split('_')
         building = parts[0]  # Extract building name
         floor = parts[1] + '_' + parts[2]  # Extract floor name (e.g., '6_floor')
         return building, floor
-    
+
     def _update_next_step(self):
         pass
-    
+
     def handle_localization(self, session_id, frame):
         """
         Handles the localization process for a given session and frame.
         Returns the pose and segment_id if localization is successful.
         """
         state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
-        
         pose_update_info = {
             'pose': None,
             'floorplan_base64': None
@@ -180,7 +188,6 @@ class Server(DataHandler):
                 
                 pose, next_segment_id = self.refine_locator.get_location(frame) #debug
                 
-
                 if pose:
                     pose_update_info['pose'] = pose
                     
@@ -272,7 +279,7 @@ class Server(DataHandler):
 
         self.localization_states[session_id] = state
         return pose_update_info
-    
+
     def handle_navigation(self, session_id):
         if session_id not in self.destination_states:
             self.logger.error("Selected destination ID is not set.")

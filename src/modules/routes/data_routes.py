@@ -28,6 +28,37 @@ def register_data_routes(app, server, socketio):
 
         return jsonify({'pose': rounded_pose})
 
+    @app.route('/list_images', methods=['GET'])
+    def get_images_list():
+        """
+        Return testing images list.
+        """
+        config = server.config['location']
+        target_place = config['place']
+        target_building = config['building']
+        target_floor = config['floor']
+        
+        # Build the path based on the place, building, and floor
+        data_path = os.path.join(server.root, "logs", target_place, target_building, target_floor)
+        
+        if not os.path.exists(data_path):
+            return jsonify({"error": "Invalid path"}), 400
+        
+        images_dict = {}
+        
+        # Traverse through directories and collect image names
+        for root, ids, _ in os.walk(data_path):
+            # We are interested in directories that match ids (like '00150')
+            for id in ids:
+                image_dir = os.path.join(root, id, 'images')
+                try:
+                    files = sorted(os.listdir(image_dir))
+                    images_dict[id] = [f for f in files if f.endswith('.png')]
+                except:
+                    pass
+        
+        return jsonify(images_dict), 200
+    
     @app.route('/get_options', methods=['GET'])
     def get_options():
         """

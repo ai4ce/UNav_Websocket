@@ -5,7 +5,7 @@ import numpy as np
 
 class Local_matcher():
     device='cuda' if torch.cuda.is_available() else "cpu"
-    def __init__(self, frame_name, map_data, threshold = 30, **feature_configs):
+    def __init__(self, frame_name, map_data, threshold = 10, **feature_configs):
         local_feature = Local_extractor(feature_configs['local'])
         self.local_feature_matcher = local_feature.matcher().to(self.device)
 
