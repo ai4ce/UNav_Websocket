@@ -89,10 +89,6 @@ class UnavServer:
         pose = server.handle_localization(frame=query_image, session_id=session_id)
 
         print("Pose: ", pose)
-        if pose["pose"] is not None:
-            pounded_pose = [int(coord) for coord in pose] if pose else None
-            print(pounded_pose)
-            return pounded_pose
 
         return pose
 

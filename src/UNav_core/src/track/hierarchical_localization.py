@@ -137,7 +137,7 @@ class Coarse_Locator:
         # Determine the segment with the highest total count
         most_likely_segment = max(segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get)
         success_ratio = segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)
-        success = success_ratio >= 0.3
+        success = success_ratio >= 0.1
         
         print(f"Most likely segment: {most_likely_segment}")
         print(f"Success ratio: {success_ratio}")
@@ -336,33 +336,48 @@ class Hloc():
         #     return None, torch.tensor([]), None
 
 
-    def pnp(self,image,feature2D,landmark3D):
+    def pnp(self, image, feature2D, landmark3D):
         """
         Start Perspective-n-points:
             Estimate the current location using implicit distortion model
         """
-        if feature2D.size()[0]>0:
+        print("Starting pnp function")
+        if feature2D.size()[0] > 0:
+            print("Feature2D size is greater than 0")
+
+            if not isinstance(image, np.ndarray):
+                image = np.array(image)
+            
             height, width, _ = image.shape
-            feature2D, landmark3D=feature2D.cpu().numpy(),landmark3D.cpu().numpy()
+            print(f"Image shape: height={height}, width={width}")
+            feature2D, landmark3D = feature2D.cpu().numpy(), landmark3D.cpu().numpy()
+            print("Converted feature2D and landmark3D to numpy arrays")
             out, p2d_inlier, p3d_inlier = coarse_pose(feature2D, landmark3D, np.array([width / 2, height / 2]))
+            print(f"Coarse pose output: {out}")
             self.list_2d.append(p2d_inlier)
             self.list_3d.append(p3d_inlier)
             self.initial_poses.append(out['pose'])
             self.pps.append(out['pp'])
+            print("Appended inliers and initial pose to lists")
             if len(self.list_2d) > self.config['implicit_num']:
+                print("List sizes exceeded implicit_num, popping oldest elements")
                 self.list_2d.pop(0)
                 self.list_3d.pop(0)
                 self.initial_poses.pop(0)
                 self.pps.pop(0)
-            pose = pose_multi_refine(self.list_2d, self.list_3d, self.initial_poses, self.pps,self.rot_base,self.T)
-
-            #reset reload num
+            pose = pose_multi_refine(self.list_2d, self.list_3d, self.initial_poses, self.pps, self.rot_base, self.T)
+            print(f"Refined pose: {pose}")
+    
+            # Reset reload num
             self.current_reload_num = 0
+            print("Reset current_reload_num to 0")
         else:
-            pose =None
+            pose = None
             self.logger.warning("!!!Cannot localize at this point, please take some steps or turn around!!!")
+            print("Feature2D size is 0, cannot localize")
+        print("Returning pose")
         return pose
-
+    
     def _determine_next_segment(self, candidates):
         candidate_histogram = {}
         max_counts = 0
