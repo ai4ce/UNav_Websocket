@@ -5,7 +5,7 @@ import numpy as np
 
 class Local_matcher():
     device='cuda' if torch.cuda.is_available() else "cpu"
-    def __init__(self, frame_name, map_data, threshold = 30, **feature_configs):
+    def __init__(self, frame_name, map_data, threshold = 10, **feature_configs):
         local_feature = Local_extractor(feature_configs['local'])
         self.local_feature_matcher = local_feature.matcher().to(self.device)
 
@@ -128,8 +128,12 @@ class Local_matcher():
 
     def lightglue(self, i, feats0):
         # Fetch local features and landmarks for the selected frame
-        local_features = self.map_data[self.frame_name[i]]['local_features']
-        landmarks = self.map_data[self.frame_name[i]]['landmarks']
+        frame_data = self.map_data[self.frame_name[i]]
+        
+        landmarks = frame_data['landmarks']
+        
+        local_features = frame_data['local_features']
+        
         valid_keypoints_index = local_features['valid_keypoints_index']
 
         feats1 = {
@@ -140,7 +144,7 @@ class Local_matcher():
         }
 
         # Create a mapping for valid landmarks using valid_keypoints_index
-        valid_landmarks = {valid_id: landmarks[valid_id] for valid_id in valid_keypoints_index}
+        valid_landmarks = {valid_id:landmark for valid_id,landmark in zip(valid_keypoints_index, landmarks)}
 
         # Batch data transfer to GPU
         pred = {

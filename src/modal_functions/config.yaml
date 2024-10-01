@@ -8,14 +8,14 @@ location:
   floor: "6_floor"
   scale: 0.01098358101
 
-IO_root: "/mnt/data/UNav-IO"
+IO_root: "/root/UNav-IO"
 
 devices: "cuda:0"
 
 hloc:
   retrieval_num: 50
   implicit_num: 1
-  ransac_thre: 30
+  ransac_thre: 10
   # match_type: 'nvs'
   match_type: "lightglue"
   batch_mode: true

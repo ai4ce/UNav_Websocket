@@ -56,25 +56,33 @@ class Coarse_Locator:
         return torch.tensor(descriptors, dtype=torch.float32).to(self.device), segment_ids
 
     def coarse_vpr(self, image):
-        """
-        Perform coarse visual place recognition.
-        :param image: The query image for which to find the place.
-        :return: Top-k matches and a boolean indicating if the corresponding segment is found.
-        """
-        # Extract global descriptor from the query image
-        query_desc = self.global_extractor(image).to(self.device)
-
-        # Compute similarity between the query descriptor and database descriptors
-        sim = torch.einsum('id,jd->ij', query_desc, self.global_descriptors)
-        topk_indices = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
-
-        # Retrieve the corresponding segment IDs for the top-k matches
-        topk_segments = self.segment_ids[topk_indices[0]]
-        
-        # Analyze top-k results
-        segment, success = self.analyze_topk_results(topk_segments)
-        
-        return topk_segments, segment, success
+            """
+            Perform coarse visual place recognition.
+            :param image: The query image for which to find the place.
+            :return: Top-k matches and a boolean indicating if the corresponding segment is found.
+            """
+            print("Starting coarse_vpr function")
+            
+            # Extract global descriptor from the query image
+            query_desc = self.global_extractor(image).to(self.device)
+            print(f"Extracted query descriptor: {query_desc.shape}")
+    
+            # Compute similarity between the query descriptor and database descriptors
+            sim = torch.einsum('id,jd->ij', query_desc, self.global_descriptors)
+            print(f"Computed similarity matrix: {sim.shape}")
+            
+            topk_indices = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
+            print(f"Top-k indices: {topk_indices}")
+    
+            # Retrieve the corresponding segment IDs for the top-k matches
+            topk_segments = self.segment_ids[topk_indices[0]]
+            print(f"Top-k segments: {topk_segments}")
+            
+            # Analyze top-k results
+            segment, success = self.analyze_topk_results(topk_segments)
+            print(f"Analyzed top-k results: segment={segment}, success={success}")
+            
+            return topk_segments, segment, success
     
     def get_topk_segments(self, topk_indices):
         """
@@ -93,6 +101,9 @@ class Coarse_Locator:
         :param topk_segments: List of segment IDs corresponding to the top-k matches.
         :return: The most likely segment and a boolean indicating if localization succeeded.
         """
+        print("Starting analyze_topk_results function")
+        print(f"Top-k segments: {topk_segments}")
+    
         segment_counts = {}
         
         # First, count occurrences of each segment in topk_segments
@@ -102,9 +113,11 @@ class Coarse_Locator:
             else:
                 segment_counts[segment] = 1
         
+        print(f"Segment counts: {segment_counts}")
+        
         # Initialize a dictionary to accumulate counts for segments and their neighbors
         segment_wt_neighbor_counts = {}
-
+    
         # Accumulate counts including neighbor segments
         for segment, count in segment_counts.items():
             # Start with the count of the segment itself
@@ -119,12 +132,18 @@ class Coarse_Locator:
             # Record the accumulated count for the segment
             segment_wt_neighbor_counts[segment] = total_count
         
+        print(f"Segment with neighbor counts: {segment_wt_neighbor_counts}")
+        
         # Determine the segment with the highest total count
         most_likely_segment = max(segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get)
-        success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.3
+        success_ratio = segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)
+        success = success_ratio >= 0.1
+        
+        print(f"Most likely segment: {most_likely_segment}")
+        print(f"Success ratio: {success_ratio}")
+        print(f"Success: {success}")
         
         return most_likely_segment, success
-
     
     def get_segment_id(self, index):
         """
@@ -223,15 +242,18 @@ class Hloc():
             Match the local features between query image and retrieved database images
         """
         with torch.inference_mode():  # Use torch.no_grad during inference
-            feats0 = self.local_feature_extractor(image)
+            image_np = np.array(image)
+            feats0 = self.local_feature_extractor(image_np)
         pts0_list,pts1_list,lms_list=[],[],[]
         max_len=0
-
+        
+        valid_db_frame_name = []
         for i in topk[0]:
             pts0,pts1,lms=self.local_feature_matcher.lightglue(i, feats0)
             
             feat_inliner_size=pts0.shape[0]
             if feat_inliner_size>self.thre:
+                valid_db_frame_name.append(self.db_name[i])
                 pts0_list.append(pts0)
                 pts1_list.append(pts1)
                 lms_list.append(lms)
@@ -240,7 +262,7 @@ class Hloc():
             del pts0,pts1,lms
         del self.query_desc, feats0
         torch.cuda.empty_cache()
-        return pts0_list,pts1_list,lms_list,max_len
+        return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
     
     def feature_matching_superglue(self,image,topk):
         """
@@ -317,33 +339,48 @@ class Hloc():
         #     return None, torch.tensor([]), None
 
 
-    def pnp(self,image,feature2D,landmark3D):
+    def pnp(self, image, feature2D, landmark3D):
         """
         Start Perspective-n-points:
             Estimate the current location using implicit distortion model
         """
-        if feature2D.size()[0]>0:
+        print("Starting pnp function")
+        if feature2D.size()[0] > 0:
+            print("Feature2D size is greater than 0")
+
+            if not isinstance(image, np.ndarray):
+                image = np.array(image)
+            
             height, width, _ = image.shape
-            feature2D, landmark3D=feature2D.cpu().numpy(),landmark3D.cpu().numpy()
+            print(f"Image shape: height={height}, width={width}")
+            feature2D, landmark3D = feature2D.cpu().numpy(), landmark3D.cpu().numpy()
+            print("Converted feature2D and landmark3D to numpy arrays")
             out, p2d_inlier, p3d_inlier = coarse_pose(feature2D, landmark3D, np.array([width / 2, height / 2]))
+            print(f"Coarse pose output: {out}")
             self.list_2d.append(p2d_inlier)
             self.list_3d.append(p3d_inlier)
             self.initial_poses.append(out['pose'])
             self.pps.append(out['pp'])
+            print("Appended inliers and initial pose to lists")
             if len(self.list_2d) > self.config['implicit_num']:
+                print("List sizes exceeded implicit_num, popping oldest elements")
                 self.list_2d.pop(0)
                 self.list_3d.pop(0)
                 self.initial_poses.pop(0)
                 self.pps.pop(0)
-            pose = pose_multi_refine(self.list_2d, self.list_3d, self.initial_poses, self.pps,self.rot_base,self.T)
-
-            #reset reload num
+            pose = pose_multi_refine(self.list_2d, self.list_3d, self.initial_poses, self.pps, self.rot_base, self.T)
+            print(f"Refined pose: {pose}")
+    
+            # Reset reload num
             self.current_reload_num = 0
+            print("Reset current_reload_num to 0")
         else:
-            pose =None
+            pose = None
             self.logger.warning("!!!Cannot localize at this point, please take some steps or turn around!!!")
+            print("Feature2D size is 0, cannot localize")
+        print("Returning pose")
         return pose
-
+    
     def _determine_next_segment(self, candidates):
         candidate_histogram = {}
         max_counts = 0
@@ -377,7 +414,7 @@ class Hloc():
             if self.batch_mode:
                 valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue_batch(image,topk)
             else:
-                pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
+                valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
             self.logger.debug("Start geometric verification")
             final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
             next_segment_id = self._determine_next_segment(final_candidates)
