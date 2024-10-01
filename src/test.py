@@ -1,6 +1,3 @@
-a= None
 
-b= 'dfasdfa'
 
-if a!=b:
-    print(111)
+socket = 'http://128.122.136.173:5001/stream_frame'

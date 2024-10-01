@@ -169,52 +169,54 @@ function updateScale() {
 }
 
 function openImageBrowser() {
-    fetch('/list_images', {
-        method: 'GET'
-    })
-    .then(response => response.json())
-    .then(data => {
-        const imageBrowser = document.getElementById('image_browser');
-        imageBrowser.innerHTML = '';
+    checkAuthAndProceed(() => {
+        fetch('/list_images', {
+            method: 'GET'
+        })
+        .then(response => response.json())
+        .then(data => {
+            const imageBrowser = document.getElementById('image_browser');
+            imageBrowser.innerHTML = '';
 
-        const sortedFolders = Object.keys(data).sort();
+            const sortedFolders = Object.keys(data).sort();
 
-        sortedFolders.forEach(id => {
-            const idDiv = document.createElement('div');
-            idDiv.innerHTML = `<strong>${id}</strong> <span class="folder-toggle">[+]</span>`;
-            idDiv.style.cursor = 'pointer';
-            idDiv.onclick = function() {
-                const imagesDiv = document.getElementById(`images_${id}`);
-                const toggleSpan = idDiv.querySelector('.folder-toggle');
-                if (imagesDiv.style.display === 'none') {
-                    imagesDiv.style.display = 'block';
-                    toggleSpan.innerText = '[-]';
-                } else {
-                    imagesDiv.style.display = 'none';
-                    toggleSpan.innerText = '[+]';
-                }
-            };
-            
-            const imagesDiv = document.createElement('div');
-            imagesDiv.id = `images_${id}`;
-            imagesDiv.style.display = 'none';
-            imagesDiv.className = 'folder-content';
+            sortedFolders.forEach(id => {
+                const idDiv = document.createElement('div');
+                idDiv.innerHTML = `<strong>${id}</strong> <span class="folder-toggle">[+]</span>`;
+                idDiv.style.cursor = 'pointer';
+                idDiv.onclick = function() {
+                    const imagesDiv = document.getElementById(`images_${id}`);
+                    const toggleSpan = idDiv.querySelector('.folder-toggle');
+                    if (imagesDiv.style.display === 'none') {
+                        imagesDiv.style.display = 'block';
+                        toggleSpan.innerText = '[-]';
+                    } else {
+                        imagesDiv.style.display = 'none';
+                        toggleSpan.innerText = '[+]';
+                    }
+                };
+                
+                const imagesDiv = document.createElement('div');
+                imagesDiv.id = `images_${id}`;
+                imagesDiv.style.display = 'none';
+                imagesDiv.className = 'folder-content';
 
-            const sortedImages = data[id].sort();
-            sortedImages.forEach(imageName => {
-                const imageLink = document.createElement('a');
-                imageLink.href = '#';
-                imageLink.innerText = imageName;
-                imageLink.onclick = () => selectImage(id, imageName);
-                imagesDiv.appendChild(document.createElement('br'));
-                imagesDiv.appendChild(imageLink);
+                const sortedImages = data[id].sort();
+                sortedImages.forEach(imageName => {
+                    const imageLink = document.createElement('a');
+                    imageLink.href = '#';
+                    imageLink.innerText = imageName;
+                    imageLink.onclick = () => selectImage(id, imageName);
+                    imagesDiv.appendChild(document.createElement('br'));
+                    imagesDiv.appendChild(imageLink);
+                });
+
+                idDiv.appendChild(imagesDiv);
+                imageBrowser.appendChild(idDiv);
             });
 
-            idDiv.appendChild(imagesDiv);
-            imageBrowser.appendChild(idDiv);
+            document.getElementById('imageBrowserModal').style.display = "block";
         });
-
-        document.getElementById('imageBrowserModal').style.display = "block";
     });
 }
 
@@ -223,18 +225,37 @@ function closeImageBrowser() {
 }
 
 function selectImage(id, imageName) {
+    const username = loggedInUsername || localStorage.getItem('username');  // Retrieve the username
+
+    if (!username) {
+        alert("Please login before selecting an image.");
+        return;
+    }
+
+    console.log(`Fetching image: ${id}/${imageName} for user ${username}`);
+    
     fetch(`/get_image/${id}/${imageName}`, {
-        method: 'GET'
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: username })  // Send the username along with the request
     })
     .then(response => response.json())
     .then(data => {
-        selectedImageBase64 = data.image;
-        document.getElementById('query_image_preview').src = `data:image/png;base64,${selectedImageBase64}`;
-        initializeOutputs();
-        drawFloorplanPreview();
-        closeImageBrowser();
+        if (data.image) {
+            selectedImageBase64 = data.image;
+            document.getElementById('query_image_preview').src = `data:image/png;base64,${selectedImageBase64}`;
+            console.log(`Image successfully loaded: ${imageName}`);
+        } else {
+            console.log(`Failed to load image: ${imageName}`);
+        }
+    })
+    .catch(error => {
+        console.log(`Error loading image: ${error}`);
     });
 }
+
 
 function initializeOutputs() {
     document.getElementById('pose_output').innerText = 'Pose: ';
@@ -310,31 +331,33 @@ function terminateServer() {
 }
 
 function localize() {
-    fetch('/localize', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query_image: selectedImageBase64 })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.pose) {
-            console.log(data);
-            const roundedPose = data.pose.map(coord => Math.round(coord));
-            document.getElementById('pose_output').innerText = `Pose: ${JSON.stringify(roundedPose)}`;
-            socket.emit('log', {data: `Pose: ${JSON.stringify(roundedPose)}`});
-            currentPose = roundedPose;
-            drawFloorplanPreview(currentPose, selectedDestination);
-        } else {
+    checkAuthAndProceed(() => {
+        fetch('/localize', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query_image: selectedImageBase64 })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.pose) {
+                console.log(data);
+                const roundedPose = data.pose.map(coord => Math.round(coord));
+                document.getElementById('pose_output').innerText = `Pose: ${JSON.stringify(roundedPose)}`;
+                socket.emit('log', {data: `Pose: ${JSON.stringify(roundedPose)}`});
+                currentPose = roundedPose;
+                drawFloorplanPreview(currentPose, selectedDestination);
+            } else {
+                document.getElementById('pose_output').innerText = `Pose: Localization failed`;
+                socket.emit('log', {data: `Pose: Localization failed`});
+            }
+        })
+        .catch(error => {
             document.getElementById('pose_output').innerText = `Pose: Localization failed`;
             socket.emit('log', {data: `Pose: Localization failed`});
-        }
-    })
-    .catch(error => {
-        document.getElementById('pose_output').innerText = `Pose: Localization failed`;
-        socket.emit('log', {data: `Pose: Localization failed`});
-        console.error("Localization error:", error);
+            console.error("Localization error:", error);
+        });
     });
 }
 
@@ -566,5 +589,66 @@ function goToMonitorPage() {
     const currentTheme = document.body.classList.contains('dark-mode') ? 'dark-mode' : 'light-mode';
     // Redirect to the monitor page with the theme as a URL parameter
     window.location.href = `/monitor?theme=${currentTheme}`;
+}
+
+
+// User login
+
+let isAuthenticated = false;
+let loggedInUsername = null;
+
+function openLogin() {
+    document.getElementById('loginModal').style.display = "block";
+}
+
+function closeLogin() {
+    document.getElementById('loginModal').style.display = "none";
+}
+
+function submitLogin() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    fetch('/login', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'Login successful') {
+            isAuthenticated = true;
+            loggedInUsername = username;  // Store username
+            localStorage.setItem('username', username); // Optionally store in localStorage for future use
+            socket.emit('log', {data: 'User logged in'});
+            closeLogin();
+        } else {
+            alert(data.error);
+        }
+    })
+    .catch(error => console.error('Login error:', error));
+}
+
+function logout() {
+    fetch('/logout', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'Logged out successfully') {
+            isAuthenticated = false;
+            socket.emit('log', {data: 'User logged out'});
+        }
+    });
+}
+
+function checkAuthAndProceed(func) {
+    if (isAuthenticated) {
+        func();
+    } else {
+        openLogin();
+    }
 }
 
