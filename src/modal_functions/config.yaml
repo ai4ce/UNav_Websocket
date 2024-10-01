@@ -15,10 +15,11 @@ devices: "cuda:0"
 hloc:
   retrieval_num: 50
   implicit_num: 1
-  ransac_thre: 10
+  ransac_thre: 30
   # match_type: 'nvs'
   match_type: "lightglue"
   batch_mode: true
+  load_all_maps: true
   map_loading_keyframes_reload: 0
 
 feature:
