@@ -23,7 +23,7 @@ class UnavServer:
     def select_user_destination(
         self,
         destination_id: str = "07993",
-        session_id: str = "test_session_id",
+        session_id: str = "test_session_id_2",
         building: str = "LightHouse",
         floor: str = "6_floor",
         place: str = "New_York_City",
@@ -49,7 +49,7 @@ class UnavServer:
 
     @method()
     def localize(
-        self, query_image_base64: str, session_id: str = "test_session_id"
+        self, query_image_base64: str, session_id: str = "test_session_id_2"
     ) -> Dict[str, Optional[str]]:
         import base64
         import io
@@ -95,26 +95,57 @@ class UnavServer:
     @method()
     def planner(
         self,
-        session_id: str = "test_session_id",
+        session_id: str = "test_session_id_2",
         destination_id: str = "07993",
         building: str = "LightHouse",
         floor: str = "6_floor",
         place: str = "New_York_City",
         base_64_image: str = None,
     ):
-        
+
         import json
         from server_manager import Server
         from modules.config.settings import load_config
         from logger_utils import setup_logger
+        import base64
+        import io
+        from PIL import Image
+        from server_manager import Server
+        from modules.config.settings import load_config
 
-
-        if True:
-            return json.dumps({"trajectory": [1, 2, 3, 4, 5]})
-        
         config = load_config("config.yaml")
 
         server = Server(logger=setup_logger(), config=config)
+
+        """
+            Handle localization request by processing the provided image and returning the pose.
+        """
+
+            
+        query_image_data = (
+            base64.b64decode(base_64_image.split(",")[1])
+            if "," in base_64_image
+            else base64.b64decode(base_64_image)
+        )
+        query_image = Image.open(io.BytesIO(query_image_data)).convert("RGB")
+
+        print("Query Image Converted from base64 to PIL Image")
+
+        response = server.select_destination(
+            session_id=session_id,
+            place="New_York_City",
+            building="LightHouse",
+            floor="6_floor",
+            destination_id="07993",
+        )
+        if response == None:
+            print("Desintation Set to id: " + "07993")
+        else:
+            print(response)
+
+        pose = server.handle_localization(frame=query_image, session_id=session_id)
+
+        print("Pose: ", pose)
 
         trajectory = server.handle_navigation(session_id)
 
