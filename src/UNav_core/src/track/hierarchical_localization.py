@@ -223,15 +223,18 @@ class Hloc():
             Match the local features between query image and retrieved database images
         """
         with torch.inference_mode():  # Use torch.no_grad during inference
-            feats0 = self.local_feature_extractor(image)
+            image_np = np.array(image)
+            feats0 = self.local_feature_extractor(image_np)
         pts0_list,pts1_list,lms_list=[],[],[]
         max_len=0
-
+        
+        valid_db_frame_name = []
         for i in topk[0]:
             pts0,pts1,lms=self.local_feature_matcher.lightglue(i, feats0)
             
             feat_inliner_size=pts0.shape[0]
             if feat_inliner_size>self.thre:
+                valid_db_frame_name.append(self.db_name[i])
                 pts0_list.append(pts0)
                 pts1_list.append(pts1)
                 lms_list.append(lms)
@@ -240,7 +243,7 @@ class Hloc():
             del pts0,pts1,lms
         del self.query_desc, feats0
         torch.cuda.empty_cache()
-        return pts0_list,pts1_list,lms_list,max_len
+        return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
     
     def feature_matching_superglue(self,image,topk):
         """
@@ -377,7 +380,7 @@ class Hloc():
             if self.batch_mode:
                 valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue_batch(image,topk)
             else:
-                pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
+                valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
             self.logger.debug("Start geometric verification")
             final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
             next_segment_id = self._determine_next_segment(final_candidates)

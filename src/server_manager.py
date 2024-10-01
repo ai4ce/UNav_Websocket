@@ -29,6 +29,8 @@ class Server(DataHandler):
         self.sock.bind((config["server"]["host"], config["server"]["port"]))
         self.sock.listen(5)
 
+        self.load_all_maps = config['hloc']['load_all_maps']
+            
         self.coarse_locator = Coarse_Locator(config=self.config)
         self.refine_locator = localization(self.coarse_locator, config=self.config, logger=self.logger)
         
@@ -37,13 +39,13 @@ class Server(DataHandler):
         self.cache_manager = CacheManager()
         self.localization_states = {}
         self.destination_states = {}
-        
+            
         with open(os.path.join(self.root, 'data', 'scale.json'), 'r') as f:
             self.scale_data = json.load(f)
 
         ############################################# test data #################################################
         # Load and process the specific image for debugging
-        # image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_floor/08128/images/2023-11-20_14-44-01.png'
+        # image_path = '/mnt/data/UNav-IO/logs/New_York_City/LightHouse/6_floor/New_test_images/20240925_162813.jpg'
         # image = Image.open(image_path)
         
         # original_width, original_height = image.size
@@ -173,18 +175,24 @@ class Server(DataHandler):
 
         if state['failures'] >= COARSE_LOCALIZE_THRESHOLD or time_since_last_success > TIMEOUT_SECONDS or not state['segment_id']:
             segment_id = self.coarse_localize(frame) #debug
+            building, floor = self._split_id(segment_id)
+
+            if self.load_all_maps:
+                current_cluster = [key for key in self.coarse_locator.connection_graph if key.startswith(building + '_' + floor)]
+                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                self.refine_locator.update_maps(map_data)
+                
             if segment_id:
                 
-                building, floor = self._split_id(segment_id)
-
-                connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
-                current_neighbors = list(connection_data.get(segment_id, set()))
-                
-                current_cluster = [segment_id] + current_neighbors
-                
-                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
-                
-                self.refine_locator.update_maps(map_data)
+                if not self.load_all_maps:
+                    connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
+                    current_neighbors = list(connection_data.get(segment_id, set()))
+                    
+                    current_cluster = [segment_id] + current_neighbors
+                    
+                    map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                    
+                    self.refine_locator.update_maps(map_data)
                 
                 pose, next_segment_id = self.refine_locator.get_location(frame) #debug
                 
@@ -212,11 +220,11 @@ class Server(DataHandler):
                             # if next_building != state['building'] or next_floor != state['floor']:
                             pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
                                 
-                            
+                            if not self.load_all_maps:
                             # delete old segments in cache
-                            next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
-                            segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
-                            self.cache_manager.release_segments(session_id, segments_to_release)
+                                next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                                segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                                self.cache_manager.release_segments(session_id, segments_to_release)
                             
                                 
                             state['building'] = next_building
@@ -230,7 +238,7 @@ class Server(DataHandler):
                     state['failures'] += 1
                     
                 # Release previous segment and its neighbors if they are no longer in use
-                if previous_segment_id and previous_segment_id != segment_id:
+                if previous_segment_id and previous_segment_id != segment_id and not self.load_all_maps:
                     previous_neighbors = list(self.coarse_locator.connection_graph.get(previous_segment_id, {}).get('adjacent_segment'), set())
                     segments_to_release = list(set([previous_segment_id] + previous_neighbors) - set(current_cluster))
                     self.cache_manager.release_segments(session_id, segments_to_release)
@@ -239,13 +247,14 @@ class Server(DataHandler):
 
         else:      
             # Retrieve the current segment and its neighbors from the cache
-            connection_data = self.coarse_locator.connection_graph.get(state['segment_id'], {})
-            current_neighbors = list(connection_data.get('adjacent_segment', set()))
-            current_cluster = [state['segment_id']] + current_neighbors
-            
-            map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+            if not self.load_all_maps:
+                connection_data = self.coarse_locator.connection_graph.get(state['segment_id'], {})
+                current_neighbors = list(connection_data.get('adjacent_segment', set()))
+                current_cluster = [state['segment_id']] + current_neighbors
+                
+                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
 
-            self.refine_locator.update_maps(map_data)
+                self.refine_locator.update_maps(map_data)
             
             pose, next_segment_id = self.refine_locator.get_location(frame) #debug
             
@@ -259,11 +268,11 @@ class Server(DataHandler):
                     state['segment_id'] = next_segment_id
                     # if next_building != state['building'] or next_floor != state['floor']:
                     pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
-                        
-                    # delete old segments in cache
-                    next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
-                    segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
-                    self.cache_manager.release_segments(session_id, segments_to_release)
+                    if not self.load_all_maps:
+                        # delete old segments in cache
+                        next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                        segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                        self.cache_manager.release_segments(session_id, segments_to_release)
 
                 pose_update_info['pose'] = pose
                 
