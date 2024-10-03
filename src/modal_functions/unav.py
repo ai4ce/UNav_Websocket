@@ -1,12 +1,24 @@
-from modal import method, gpu
+from modal import method, gpu,build,enter
 from typing import Optional, Dict
 
 from modal_config import app, unav_image, volume
 from logger_utils import setup_logger
 
 
-@app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any())
+@app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any(),enable_memory_snapshot=True)
 class UnavServer:
+    
+    
+    @enter(snap=True)
+    def load_server(self):
+        from server_manager import Server
+        from modules.config.settings import load_config
+
+        config = load_config("config.yaml")
+
+        self.server = Server(logger=setup_logger(), config=config)
+    
+    
     @method()
     def get_destinations_list(self):
         from server_manager import Server
@@ -31,18 +43,16 @@ class UnavServer:
     ):
 
         import json
-        from server_manager import Server
-        from modules.config.settings import load_config
         from logger_utils import setup_logger
         import base64
         import io
         from PIL import Image
-        from server_manager import Server
-        from modules.config.settings import load_config
+        # from server_manager import Server
+        # from modules.config.settings import load_config
 
-        config = load_config("config.yaml")
+        # config = load_config("config.yaml")
 
-        server = Server(logger=setup_logger(), config=config)
+        # server = Server(logger=setup_logger(), config=config)
 
         """
             Handle localization request by processing the provided image and returning the pose.
@@ -57,7 +67,7 @@ class UnavServer:
 
         print("Query Image Converted from base64 to PIL Image")
 
-        response = server.select_destination(
+        response = self.server.select_destination(
             session_id=session_id,
             place=place,
             building=building,
@@ -69,10 +79,10 @@ class UnavServer:
         else:
             print(response)
 
-        pose = server.handle_localization(frame=query_image, session_id=session_id)
+        pose = self.server.handle_localization(frame=query_image, session_id=session_id)
 
         print("Pose: ", pose)
 
-        trajectory = server.handle_navigation(session_id)
+        trajectory = self.server.handle_navigation(session_id)
 
         return json.dumps({"trajectory": trajectory})
