@@ -1,15 +1,21 @@
-from modal import method, gpu,build,enter
+from modal import method, gpu, build, enter
 from typing import Optional, Dict
 
 from modal_config import app, unav_image, volume
 from logger_utils import setup_logger
 
 
-@app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any(),enable_memory_snapshot=True)
+@app.cls(
+    image=unav_image,
+    volumes={"/root/UNav-IO": volume},
+    gpu=gpu.Any(),
+    # enable_memory_snapshot=True,
+    concurrency_limit=3,
+    allow_concurrent_inputs=3,
+)
 class UnavServer:
-    
-    
-    @enter(snap=True)
+
+    @enter()
     def load_server(self):
         from server_manager import Server
         from modules.config.settings import load_config
@@ -17,18 +23,19 @@ class UnavServer:
         config = load_config("config.yaml")
 
         self.server = Server(logger=setup_logger(), config=config)
-    
-    
+
     @method()
     def get_destinations_list(self):
-        from server_manager import Server
-        from modules.config.settings import load_config
+        # from server_manager import Server
+        # from modules.config.settings import load_config
 
-        config = load_config("config.yaml")
+        # config = load_config("config.yaml")
 
-        server = Server(logger=None, config=config)
+        # server = Server(logger=None, config=config)
 
-        response = server.get_destinations_list(building="LightHouse", floor="6_floor")
+        response = self.server.get_destinations_list(
+            building="LightHouse", floor="6_floor"
+        )
         return response
 
     @method()
@@ -47,6 +54,7 @@ class UnavServer:
         import base64
         import io
         from PIL import Image
+
         # from server_manager import Server
         # from modules.config.settings import load_config
 
