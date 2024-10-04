@@ -44,7 +44,6 @@ class UnavServer:
     ):
 
         import json
-        from logger_utils import setup_logger
         import base64
         import io
         from PIL import Image
