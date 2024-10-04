@@ -19,7 +19,7 @@ hloc:
   # match_type: 'nvs'
   match_type: "lightglue"
   batch_mode: true
-  load_all_maps: true
+  load_all_maps: False
   map_loading_keyframes_reload: 0
 
 feature:
