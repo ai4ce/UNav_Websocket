@@ -50,13 +50,6 @@ class UnavServer:
         import io
         from PIL import Image
 
-        # from server_manager import Server
-        # from modules.config.settings import load_config
-
-        # config = load_config("config.yaml")
-
-        # server = Server(logger=setup_logger(), config=config)
-
         """
             Handle localization request by processing the provided image and returning the pose.
         """
