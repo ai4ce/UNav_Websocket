@@ -9,12 +9,13 @@ from logger_utils import setup_logger
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=gpu.Any(),
-    # enable_memory_snapshot=True,
+    enable_memory_snapshot=True,
     concurrency_limit=3,
     allow_concurrent_inputs=3,
 )
 class UnavServer:
-
+    
+    @build()
     @enter()
     def load_server(self):
         from server_manager import Server
@@ -26,12 +27,6 @@ class UnavServer:
 
     @method()
     def get_destinations_list(self):
-        # from server_manager import Server
-        # from modules.config.settings import load_config
-
-        # config = load_config("config.yaml")
-
-        # server = Server(logger=None, config=config)
 
         response = self.server.get_destinations_list(
             building="LightHouse", floor="6_floor"
