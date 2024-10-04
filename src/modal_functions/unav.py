@@ -1,5 +1,4 @@
 from modal import method, gpu, build, enter
-from typing import Optional, Dict
 
 from modal_config import app, unav_image, volume
 from logger_utils import setup_logger
