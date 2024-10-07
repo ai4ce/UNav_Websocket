@@ -1,24 +1,37 @@
-from modal import method, gpu
-from typing import Optional, Dict
+from modal import method, gpu, build, enter
 
 from modal_config import app, unav_image, volume
 from logger_utils import setup_logger
 
 
-@app.cls(image=unav_image, volumes={"/root/UNav-IO": volume}, gpu=gpu.Any())
+@app.cls(
+    image=unav_image,
+    volumes={"/root/UNav-IO": volume},
+    gpu=gpu.Any(),
+    enable_memory_snapshot=True,
+    concurrency_limit=3,
+    allow_concurrent_inputs=3,
+)
 class UnavServer:
-    @method()
-    def get_destinations_list(self):
+    
+    @build()
+    @enter()
+    def load_server(self):
         from server_manager import Server
         from modules.config.settings import load_config
 
         config = load_config("config.yaml")
 
-        server = Server(logger=None, config=config)
+        self.server = Server(logger=setup_logger(), config=config)
 
-        response = server.get_destinations_list(building="LightHouse", floor="6_floor")
+    @method()
+    def get_destinations_list(self):
+
+        response = self.server.get_destinations_list(
+            building="LightHouse", floor="6_floor"
+        )
         return response
-
+    
     @method()
     def planner(
         self,
@@ -29,35 +42,29 @@ class UnavServer:
         place: str = "",
         base_64_image: str = None,
     ):
-
+    
         import json
-        from server_manager import Server
-        from modules.config.settings import load_config
-        from logger_utils import setup_logger
+        import time
         import base64
         import io
         from PIL import Image
-        from server_manager import Server
-        from modules.config.settings import load_config
-
-        config = load_config("config.yaml")
-
-        server = Server(logger=setup_logger(), config=config)
-
+    
         """
             Handle localization request by processing the provided image and returning the pose.
         """
-
+    
+        start_time = time.time()  # Start time for the entire function
+    
         query_image_data = (
             base64.b64decode(base_64_image.split(",")[1])
             if "," in base_64_image
             else base64.b64decode(base_64_image)
         )
         query_image = Image.open(io.BytesIO(query_image_data)).convert("RGB")
-
+    
         print("Query Image Converted from base64 to PIL Image")
-
-        response = server.select_destination(
+    
+        response = self.server.select_destination(
             session_id=session_id,
             place=place,
             building=building,
@@ -68,11 +75,26 @@ class UnavServer:
             print("Desintation Set to id: " + "07993")
         else:
             print(response)
-
-        pose = server.handle_localization(frame=query_image, session_id=session_id)
-
+    
+        # Measure time for handle_localization
+        start_localization_time = time.time()
+        pose = self.server.handle_localization(frame=query_image, session_id=session_id)
+        end_localization_time = time.time()
+        localization_time = end_localization_time - start_localization_time
+        print(f"Localization Time: {localization_time:.2f} seconds")
+    
         print("Pose: ", pose)
-
-        trajectory = server.handle_navigation(session_id)
-
+    
+        # Measure time for handle_navigation
+        start_navigation_time = time.time()
+        trajectory = self.server.handle_navigation(session_id)
+        end_navigation_time = time.time()
+        navigation_time = end_navigation_time - start_navigation_time
+        print(f"Navigation Time: {navigation_time:.2f} seconds")
+    
+        end_time = time.time()  # End time for the entire function
+        elapsed_time = end_time - start_time  # Calculate elapsed time for the entire function
+    
+        print(f"Total Execution Time: {elapsed_time:.2f} seconds")  # Print total elapsed time
+    
         return json.dumps({"trajectory": trajectory})

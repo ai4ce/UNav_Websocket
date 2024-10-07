@@ -4,6 +4,7 @@ from pathlib import Path
 volume = Volume.from_name("Visiondata")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
+LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"
 
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
@@ -16,6 +17,9 @@ def download_torch_hub_weights():
     import torch
     model_weights = torch.hub.load_state_dict_from_url(MODEL_URL, progress=True)
     torch.save(model_weights, "vgg16_weights.pth")
+
+    lightglue_weights = torch.hub.load_state_dict_from_url(LIGHTGLUE_URL, progress=True)
+    torch.save(lightglue_weights,"superpoint_lightglue_v0-1_arxiv-pth")
 
 
 app = App(
