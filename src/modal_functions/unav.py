@@ -9,8 +9,8 @@ from logger_utils import setup_logger
     volumes={"/root/UNav-IO": volume},
     gpu=gpu.Any(),
     enable_memory_snapshot=True,
-    concurrency_limit=3,
-    allow_concurrent_inputs=3,
+    concurrency_limit=20,
+    allow_concurrent_inputs=20,
 )
 class UnavServer:
 
