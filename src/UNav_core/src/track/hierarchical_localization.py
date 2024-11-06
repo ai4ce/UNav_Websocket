@@ -121,7 +121,7 @@ class Coarse_Locator:
         
         # Determine the segment with the highest total count
         most_likely_segment = max(segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get)
-        success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.3
+        success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.1
         
         return most_likely_segment, success
 
@@ -365,7 +365,9 @@ class Hloc():
             
     def get_location(self, image):
         self.logger.debug("Start image retrieval")
+
         topk=self.global_retrieval(image)
+        
         valid_db_frame_name = []
         next_segment_id = None
         
@@ -381,11 +383,17 @@ class Hloc():
                 valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue_batch(image,topk)
             else:
                 valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
+            
             self.logger.debug("Start geometric verification")
-            final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
-            next_segment_id = self._determine_next_segment(final_candidates)
+            if len(pts0_list)>0:
+                final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
+                if len(final_candidates)>0:
+                    next_segment_id = self._determine_next_segment(final_candidates)
+                else:
+                    return None, None
+            else:
+                return None, None
 
         self.logger.debug("Estimate the camera pose using PnP algorithm")
         pose=self.pnp(image,feature2D,landmark3D)
-
         return pose, next_segment_id

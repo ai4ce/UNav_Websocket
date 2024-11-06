@@ -6,6 +6,7 @@ import os
 import time
 import cv2
 import numpy as np
+from utils.time_logger import TimeLogger
 
 from utils.cache_manager import CacheManager
 
@@ -19,6 +20,7 @@ map_cache = {}
 # Configuration for localization retries and timeouts
 COARSE_LOCALIZE_THRESHOLD = 5  # Number of failures before doing a coarse localize
 TIMEOUT_SECONDS = 20  # Time since the last successful localize before doing a coarse localize
+time_logger = TimeLogger()
 
 def register_frame_routes(app, server, socketio):
     @app.route('/stream_frame', methods=['POST'])
@@ -52,7 +54,13 @@ def register_frame_routes(app, server, socketio):
 
                 # Perform localization if requested
                 if do_localize:
+                    localization_start_time = time.time()
                     pose_update_info = server.handle_localization(session_id, image_np)
+                    # Extract building and floor from pose_update_info, defaulting to 'N/A' if None
+                    building = pose_update_info.get('building')
+                    floor = pose_update_info.get('floor')
+                    time_logger.log_localization_time(session_id, building, floor, localization_start_time, pose_update_info)
+
                     response_data['pose'] = pose_update_info.get('pose')
 
                 buffered = io.BytesIO()

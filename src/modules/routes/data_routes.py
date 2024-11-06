@@ -4,6 +4,10 @@ import base64
 from PIL import Image
 import io
 import numpy as np
+from utils.time_logger import TimeLogger
+import time
+
+time_logger = TimeLogger()
 
 def register_data_routes(app, server, socketio):
 
@@ -158,8 +162,10 @@ def register_data_routes(app, server, socketio):
         data = request.json
         session_id = data.get('session_id')
         
-        trajectory = server.handle_navigation(session_id)
-
+        navigation_start_time = time.time()
+        trajectory,_ = server.handle_navigation(session_id)
+        time_logger.log_navigation_time(navigation_start_time, trajectory)
+        
         socketio.emit('planner_update', {'trajectory': trajectory})
         return jsonify({'trajectory': trajectory})
         # except ValueError as e:

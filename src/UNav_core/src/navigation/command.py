@@ -9,7 +9,7 @@ console_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(m
 console_handler.setFormatter(console_format)
 logger.addHandler(console_handler)
 
-def actions(current_pose,path_list,scale):
+def actions(trajectory):
     xc, yc, an = current_pose
     action_list = []
     for p in path_list:
