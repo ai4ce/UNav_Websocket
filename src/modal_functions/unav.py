@@ -72,7 +72,7 @@ class UnavServer:
             destination_id=destination_id,
         )
         if response == None:
-            print("Desintation Set to id: " + "07993")
+            print("Desintation Set to id: " + destination_id)
         else:
             print(response)
 
@@ -101,7 +101,9 @@ class UnavServer:
             f"Total Execution Time: {elapsed_time:.2f} seconds"
         )  # Print total elapsed time
 
-        return json.dumps({"trajectory": trajectory})
+        scale = self.server.config["location"]["scale"]
+
+        return json.dumps({"trajectory": trajectory, "scale": scale})
 
     @method()
     def start_server(self):
