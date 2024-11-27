@@ -137,7 +137,7 @@ class Coarse_Locator:
         # Determine the segment with the highest total count
         most_likely_segment = max(segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get)
         success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.1
-        
+        print(f"Success ratio: {success}")
         return most_likely_segment, success
     
     def get_segment_id(self, index):
