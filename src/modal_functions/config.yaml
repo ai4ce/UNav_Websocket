@@ -13,7 +13,7 @@ IO_root: "/root/UNav-IO"
 devices: "cuda:0"
 
 hloc:
-  retrieval_num: 50
+  retrieval_num: 100
   implicit_num: 1
   ransac_thre: 10
   # match_type: 'nvs'
