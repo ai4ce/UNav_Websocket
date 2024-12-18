@@ -41,6 +41,7 @@ class UnavServer:
         floor: str = "",
         place: str = "",
         base_64_image: str = None,
+        get_floor_plan: bool = False,
     ):
 
         import json
@@ -102,6 +103,10 @@ class UnavServer:
         )  # Print total elapsed time
 
         scale = self.server.config["location"]["scale"]
+
+        if(get_floor_plan):
+            floorplan_base64 = pose["floorplan_base64"]
+            return json.dumps({"trajectory": trajectory, "scale": scale, "floorplan_base64" : floorplan_base64}) #return floor plan if requested 
 
         return json.dumps({"trajectory": trajectory, "scale": scale})
 
