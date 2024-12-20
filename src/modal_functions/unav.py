@@ -28,7 +28,7 @@ class UnavServer:
     def get_destinations_list(self):
 
         response = self.server.get_destinations_list(
-            building="LightHouse", floor="6_floor"
+            building="New_York_University_hospital", floor="17th_floor"
         )
         return response
 
