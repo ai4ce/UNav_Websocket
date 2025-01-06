@@ -4,7 +4,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-volume = modal.Volume.from_name("testing224", create_if_missing=True)
+volume = modal.Volume.from_name("NewVisiondata", create_if_missing=True)
 
 
 def process_upload(remote_path, folder_path):
