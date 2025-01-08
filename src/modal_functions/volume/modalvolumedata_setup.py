@@ -28,10 +28,10 @@ s3_client = boto3.client(
 bucket_name = 'vis4ion'
 
 files = {
-    "demo_query.png": "17MzPE9TyKiNsi6G59rqLCMMd40cIK3bU",
-    "destination.json": "1sIzFujoumSsVlZqlwwO20l96ZziORP-w",
-    "hloc.yaml": "15JYLqU9Y56keMrg9ZfxwfbkbL6_haYpx",
-    "MapConnection_Graph.pkl": "199xZSc9jSajiCqzDW_AzhuqOp_YS41fZ",
+    # "demo_query.png": "17MzPE9TyKiNsi6G59rqLCMMd40cIK3bU",
+    # "destination.json": "1sIzFujoumSsVlZqlwwO20l96ZziORP-w",
+    # "hloc.yaml": "15JYLqU9Y56keMrg9ZfxwfbkbL6_haYpx",
+    # "MapConnection_Graph.pkl": "199xZSc9jSajiCqzDW_AzhuqOp_YS41fZ",
 }
 
 @app.function(volumes={"/files": volume})   ## to create necesasry directories 
@@ -100,9 +100,41 @@ def checkAndDownload_file_from_remoteStorage():   ## download the data to the re
 
     logging.info("All files downloaded successfully from google drive and s3 bucket.")
 
+@app.function(volumes={"/files": volume})
+def rearrange_files_and_folders():
+    items_to_rearrange = [
+    # ("/files/data/6_floor", "/files/data/New_York_City/6_floor"),  # File
+    # ("/files/data/global_features.h5", "/files/data/New_York_City/global_features.h5"),  # File
+    # ("/files/data/NYISE_VC", "/files/data/New_York_City/NYISE_VC"),    # Folder
+    # ("/files/data/save.pkl", "/files/data/New_York_City/save.pkl"),
+    # ("/files/data/MapConnnection_Graph.pkl", "/files/data/New_York_City/MapConnnection_Graph.pkl"),
+]
+    for source_path, destination_path in items_to_rearrange:
+        try:
+            if os.path.isfile(source_path):
+        
+                logging.info(f"Moving file from {source_path} to {destination_path}")
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                shutil.move(source_path, destination_path)
+                logging.info(f"Successfully moved file from {source_path} to {destination_path}")
+                
+            elif os.path.isdir(source_path):
+                
+                logging.info(f"Moving folder from {source_path} to {destination_path}")
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                shutil.move(source_path, destination_path)
+                logging.info(f"Successfully moved folder from {source_path} to {destination_path}")
+                
+            else:
+                logging.warning(f"Source path not found: {source_path}")
+        except Exception as e:
+            logging.error(f"Failed to move {source_path} to {destination_path}. Error: {e}")
+
+    logging.info("All files and folders have been rearranged successfully.")
 
 
 if __name__ == "__main__":
-    with app.run():
+    with app.run(detach=True):
         create_directories.remote()
         checkAndDownload_file_from_remoteStorage.remote()
+        rearrange_files_and_folders.remote()
