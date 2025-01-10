@@ -344,10 +344,10 @@ class Server(DataHandler):
         pose = localization_state.get('pose')
         if pose:
             trajectory = self.trajectory_maker.calculate_path(self, session_id, localization_state)
-            # action_list = actions(trajectory)
+            action_list = actions(trajectory)
             
             if len(trajectory) > 0:
-                return trajectory, None
+                return trajectory,action_list
             else:
                 return {}, None
         else:
