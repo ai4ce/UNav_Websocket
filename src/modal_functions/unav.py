@@ -88,7 +88,7 @@ class UnavServer:
 
         # Measure time for handle_navigation
         start_navigation_time = time.time()
-        trajectory = self.server.handle_navigation(session_id)
+        trajectory,action_list = self.server.handle_navigation(session_id)
         end_navigation_time = time.time()
         navigation_time = end_navigation_time - start_navigation_time
         print(f"Navigation Time: {navigation_time:.2f} seconds")
@@ -106,9 +106,9 @@ class UnavServer:
 
         if(get_floor_plan):
             floorplan_base64 = pose["floorplan_base64"]
-            return json.dumps({"trajectory": trajectory, "scale": scale, "floorplan_base64" : floorplan_base64}) #return floor plan if requested 
+            return json.dumps({"trajectory": trajectory, "scale": scale, "floorplan_base64" : floorplan_base64,"actions": action_list}) #return floor plan if requested 
 
-        return json.dumps({"trajectory": trajectory, "scale": scale})
+        return json.dumps({"trajectory": trajectory, "scale": scale, "actions":action_list})
 
     @method()
     def start_server(self):
