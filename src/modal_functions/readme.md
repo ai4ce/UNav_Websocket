@@ -28,5 +28,5 @@ modal deploy modal_functions/unav.py
 Make sure you are inside the `src` folder
 
 ``` 
-python modal_functions/test_modal_function.py
+python modal_functions/test_modal_functions.py
 ```
